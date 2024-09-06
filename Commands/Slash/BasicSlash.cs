@@ -2,6 +2,7 @@
 using DSharpPlus.Entities;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using MySql.Data.MySqlClient;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
@@ -27,9 +28,8 @@ namespace TornWarTracker.Commands.Slash
         private static readonly string TornApiKey = "MKorHNfemsaPGl5C";
 
 
-
         [SlashCommand("verifyme","Verify yourself on the GTH server")]
-        [SlashCommandPermissions(Permissions.None)] // Ensure the command is available to everyone
+        [SlashCommandPermissions(Permissions.All)] // Ensure the command is available to everyone
         public async Task VerifyMeCommand(InteractionContext ctx)
         {
             // Acknowledge the interaction immediately
@@ -106,6 +106,9 @@ namespace TornWarTracker.Commands.Slash
                 case "master chief": // Make sure the comparison is lowercase
                     discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Master Chief"); // Adjust the role name
                     break;
+                case "prometheus": // Make sure the comparison is lowercase
+                    discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Prometheus"); // Adjust the role name
+                    break;
                 // Add more cases for each role im abit to lazy for this right now 
                 default:
                     discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Spartan"); // Default role
@@ -127,5 +130,44 @@ namespace TornWarTracker.Commands.Slash
 
             
         }
+
+
+
+
+        [SlashCommand("testdb", "Test the connection to the database")]
+        [SlashCommandPermissions(Permissions.All)]
+        public async Task TestDatabaseCommand(InteractionContext ctx)
+        {
+            Console.WriteLine($"Command Started: TestDatabaseCommand by user {ctx.User.Username}");
+            await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
+
+            // Create a DM channel with the user
+            var dmChannel = await ctx.Member.CreateDmChannelAsync();
+
+            // Create an instance of the DatabaseConnection class
+            DatabaseConnection dbConnection = new DatabaseConnection();
+            MySqlConnection connection = dbConnection.GetConnection();
+
+            if (connection != null)
+            {
+                // Connection successful - send a DM to the user
+                Console.WriteLine("Database connection successful");
+                await dmChannel.SendMessageAsync("Successfully connected to the AWS RDS MySQL database!");
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Database connection successful. Check your DMs."));
+
+                // Close the connection
+                dbConnection.CloseConnection(connection);
+            }
+            else
+            {
+                // Connection failed - send a DM to the user
+                Console.WriteLine("Failed to connect to the database");
+                await dmChannel.SendMessageAsync("Failed to connect to the AWS RDS MySQL database.");
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Database connection failed. Check your DMs."));
+            }
+        }
+
+
+
     }
 }
