@@ -10,7 +10,6 @@ namespace TornWarTracker.Torn_API
 {
     public class requestAPI
     {
-
         public static async Task<string> GetFrom(string url)
         {
             try
@@ -25,9 +24,6 @@ namespace TornWarTracker.Torn_API
             }
             return null;
         }
-
-
-
 
         public static async Task<string> GetApiResponse(string url)
         {

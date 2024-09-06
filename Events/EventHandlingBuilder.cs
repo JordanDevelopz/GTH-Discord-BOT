@@ -5,6 +5,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DSharpPlus.CommandsNext.Attributes;
+using DSharpPlus.CommandsNext.Exceptions;
+using DSharpPlus.CommandsNext;
+using DSharpPlus.Entities;
 
 namespace TornWarTracker.Events
 {
@@ -35,5 +39,31 @@ namespace TornWarTracker.Events
                 }
             }
         }
+    
+    public class CoolDownHandler
+        {
+            //Create cooldown event handler
+            public async Task _commands_CommandErrored(CommandsNextExtension sender, CommandErrorEventArgs args)
+            {
+                if (args.Exception is ChecksFailedException exception)
+                {
+                    string timeleft = string.Empty;
+                    foreach (var check in exception.FailedChecks)
+                    {
+                        var cooldown = (CooldownAttribute)check;
+                        timeleft = cooldown.GetRemainingCooldown(args.Context).ToString(@"hh\:mm\:ss");
+                    }
+
+                    var cooldownmessage = new DiscordEmbedBuilder
+                    {
+                        Color = DiscordColor.Red,
+                        Title = "Please wait for the cooldown to end",
+                        Description = $"Time: {timeleft}"
+                    };
+                    await args.Context.Channel.SendMessageAsync(embed: cooldownmessage);
+                }
+            }
+        }
+
     }
 }

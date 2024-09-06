@@ -181,6 +181,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Commands\Slash\BasicSlash.cs" />
     <Compile Include="Commands\TornCommands.cs" />
     <Compile Include="config\JSONReader.cs" />
     <Compile Include="Data Structures\tornDataStructures.cs" />
@@ -194,5 +195,6 @@
     <None Include="config\config.json" />
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
