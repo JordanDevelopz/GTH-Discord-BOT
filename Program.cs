@@ -1,16 +1,31 @@
 ﻿using DSharpPlus;
 using DSharpPlus.CommandsNext;
+using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using TornWarTracker.Commands;
 using TornWarTracker.config;
+using TornWarTracker.Events;
+
+using Microsoft.Extensions.Configuration;
+using DSharpPlus.Interactivity;
+
 
 namespace TornWarTracker
 {
     internal class Program
     {
-        private static DiscordClient Client { get; set; }
-        private static CommandsNextExtension Commands {  get; set; }
+        private CancellationTokenSource _cts{  get; set; }
+        private IConfigurationRoot _config;
+
+        private static DiscordClient _discord { get; set; }
+        private static CommandsNextExtension _commands {  get; set; }
+        private static EventHandlingBuilder.MessageHandler _messageHandler;
+        private  InteractivityExtension _interactivity { get; set; }
+
         static async Task Main(string[] args)
         {
             var jsonReader = new JSONReader();
@@ -21,12 +36,14 @@ namespace TornWarTracker
                 Intents = DiscordIntents.All,
                 Token = jsonReader.token,
                 TokenType = TokenType.Bot,
-                AutoReconnect = true
+                AutoReconnect = true,
             };
 
-            Client = new DiscordClient(discordConfig);
+            _discord = new DiscordClient(discordConfig);
+            _messageHandler = new EventHandlingBuilder.MessageHandler();
 
-            Client.Ready += Client_Ready;
+            _discord.Ready += Client_Ready;
+            _discord.MessageCreated += _messageHandler._discord_MessageCreated;
 
             var commandsConfig = new CommandsNextConfiguration()
             {
@@ -36,13 +53,16 @@ namespace TornWarTracker
                 //EnableDefaultHelp = false,
             };
 
-            Commands = Client.UseCommandsNext(commandsConfig);
+            _commands = _discord.UseCommandsNext(commandsConfig);
 
-            Commands.RegisterCommands<TornCommands>();
+            _commands.RegisterCommands<TornCommands>();
 
-            await Client.ConnectAsync();
+            await _discord.ConnectAsync();
+
+            await Task.Delay(Timeout.InfiniteTimeSpan);
             await Task.Delay(-1);
         }
+
 
         private static Task Client_Ready(DiscordClient sender, DSharpPlus.EventArgs.ReadyEventArgs args)
         {
