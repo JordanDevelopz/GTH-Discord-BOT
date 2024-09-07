@@ -123,20 +123,32 @@ namespace TornWarTracker
             //register the commands
             _commands.RegisterCommands<TornCommands>();
 
-            var slashcommandsConfig = _discord.UseSlashCommands();
-            slashcommandsConfig.RegisterCommands<BasicSlash>(guildId: null);
+            SetUpSlashes();
 
-            // Error handling for slash commands
-            slashcommandsConfig.SlashCommandErrored += async (s, e) =>
-            {
-                await e.Context.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
-                    .WithContent($"An error occurred: {e.Exception.Message}"));
-            };
 
             //connect the bot online
             await _discord.ConnectAsync();
             await Task.Delay(Timeout.InfiniteTimeSpan);
-        }        
+        }      
+        
+        static void SetUpSlashes()
+        {
+            Console.WriteLine("Registering SlashCommands...");
+            var slashCommandConfig = _discord.UseSlashCommands();
+            slashCommandConfig.RegisterCommands<SlashCommands>(guildId: null);
+            slashCommandConfig.RegisterCommands<SlashCommands.Initiation>(guildId: null);
+            slashCommandConfig.RegisterCommands<SlashCommands.General>(guildId: null);
+            slashCommandConfig.RegisterCommands<SlashCommands.War>(guildId: null);
+            slashCommandConfig.RegisterCommands<SlashCommands.Progression>(guildId: null);
+
+            // Error handling for slash commands
+            slashCommandConfig.SlashCommandErrored += async (s, e) =>
+            {
+                await e.Context.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+                    .WithContent($"An error occurred: {e.Exception.Message}"));
+            };
+        }
+
 
         private static Task Client_Ready(DiscordClient sender, DSharpPlus.EventArgs.ReadyEventArgs args)
         {

@@ -18,7 +18,7 @@ namespace TornWarTracker.Events
         {
             public async Task _discord_MessageCreated(DiscordClient sender, DSharpPlus.EventArgs.MessageCreateEventArgs args)
             {
-                string specificText = "Hey, War tracker";
+                string specificText = "Hey DataSpartan";
                 var responses = new Dictionary<string, string>
     {
         { "l4leezus", "Hey, Dad!" },

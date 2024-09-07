@@ -214,14 +214,17 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Commands\Slash\BasicSlash.cs" />
+    <Compile Include="Commands\Slash\SlashCommands.cs" />
     <Compile Include="Commands\TornCommands.cs" />
     <Compile Include="config\JSONReader.cs" />
     <Compile Include="Data Structures\tornDataStructures.cs" />
+    <Compile Include="Discord Utilities\discordUtils.cs" />
     <Compile Include="Events\EventHandlingBuilder.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Torn API\requestAPI.cs" />
+    <Compile Include="Torn API\tornAPIUtils.cs" />
+    <Compile Include="War\WarTracking.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
