@@ -152,7 +152,7 @@ namespace TornWarTracker
 
         private static Task Client_Ready(DiscordClient sender, DSharpPlus.EventArgs.ReadyEventArgs args)
         {
-            return Task.CompletedTask;
+          return Task.CompletedTask;
         }
     }
 

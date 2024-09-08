@@ -241,7 +241,21 @@ namespace TornWarTracker.Commands.Slash
                     await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Database connection failed."));
                 }
             }
+
+
+            [SlashCommand("register_faction", "Register your faction for DataSpartan services.")]
+
+            public async Task VerifyFaction(InteractionContext ctx)
+            {
+                //check leez or alaska logs for payments: payments to have defined message.
+
+                //If payment found, log faction ID in db, with timestamp for expiry; based on payment amount.
+
+                //If payment not found, deny services.
+            }
         }
+
+
 
         public class General : ApplicationCommandModule
         {
@@ -266,6 +280,11 @@ namespace TornWarTracker.Commands.Slash
                 Console.WriteLine($"WarTracker Command Started: Registered by user {ctx.User.Username}");
                 Console.WriteLine($"WarTracker Command Started: Registered from guild {ctx.Guild.Id}");
 
+                //perform payment checks for service
+
+                //perform second check on expiry, to see if this method will exceed the service end time.
+
+
                 //check if this command has already been called
                 if (warTrackerRunning.TryGetValue(ctx.Guild.Id, out bool isRunning) && isRunning)
                 {
@@ -275,7 +294,7 @@ namespace TornWarTracker.Commands.Slash
                 }
 
                 //get faction ID from user profile
-                int factionId = await tornAPIUtils.GetFactionIDFromUser(ctx, TempTornApiKey);
+                int factionId = await tornAPIUtils.User.GetFactionID(ctx, TempTornApiKey);
 
                 if (factionId == 0)
                 {
@@ -283,7 +302,7 @@ namespace TornWarTracker.Commands.Slash
                 }
 
                 //Check user has suitable API key by pinging faction attacks api endpoint
-                JObject attacksdata = await tornAPIUtils.GetAttacksFromFaction(ctx, TempTornApiKey, factionId);
+                JObject attacksdata = await tornAPIUtils.Faction.GetAttacks(ctx, TempTornApiKey, factionId);
                 if (attacksdata == null)
                 {
                     return;
@@ -321,7 +340,7 @@ namespace TornWarTracker.Commands.Slash
                 else
                 {
                     await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
-                        .WithContent("War Tracker is currently running."));
+                        .WithContent("War Tracker is not currently running."));
                     return;
                 }
             }

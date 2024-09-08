@@ -1,6 +1,7 @@
 ﻿using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
+using Google.Protobuf.WellKnownTypes;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -10,11 +11,63 @@ using System.Linq;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using static TornWarTracker.Torn_API.tornAPIUtils;
 
 namespace TornWarTracker.Torn_API
 {
     public class tornAPIUtils
     {
+        public static class PaymentVerification
+        {
+            //Method to check if faction has paid for the service
+
+            //each slash command must use this method.
+
+            //check calling user ID, get faction ID, check against db of permitted factions
+            public static async Task<bool> VerifyPayment(InteractionContext ctx, string TornApiKey)
+            {
+                //connect to db
+
+                //set-up DM
+                var dmChannel = await ctx.Member.CreateDmChannelAsync();
+                //get factionID from user
+                int factionID = await User.GetFactionID(ctx,TornApiKey);
+                if (factionID == 0)
+                {
+                    return false;
+                }
+
+                //get curent timestamp from Torn
+
+                //check faction ID and timestamp against db
+                // method required!!
+                int dbID = 16057;
+
+                int timestampEnd = 123456789;
+
+                if (factionID == dbID)
+                {
+                    long currenttime = await Torn.GetCurrentTimeStamp(TornApiKey);
+                    if (currenttime > timestampEnd)
+                    {
+                        await dmChannel.SendMessageAsync("Your DataSpartan services have expired. Please contact the devs to make new payment.");
+                        await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("Service Expired"));
+                        return false;
+                    }
+                    else
+                    {                        
+                        return true;
+                    }                    
+                }
+                else
+                {
+                    await dmChannel.SendMessageAsync("Your faction has not been registered for DataSpartan services. Please contact the devs");
+                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("Service Expired"));
+                    return false;
+                }
+            }
+        }
+
         public static class ErrorCodes
         {
             public static readonly Dictionary<int, string> ErrorDescriptions = new Dictionary<int, string>
@@ -53,60 +106,100 @@ namespace TornWarTracker.Torn_API
             await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent($"Error {errorCode}: {errorMessage}"));
         }
 
-        public static async Task<int> GetFactionIDFromUser(InteractionContext ctx,string TornApiKey)
+        public class User
         {
-            string apiUrl = $"https://api.torn.com/user/?selections=profile&key={TornApiKey}";
-            string jsonResponse = await requestAPI.GetFrom(apiUrl);
-
-            if (jsonResponse == null)
+            public static async Task<int> GetFactionID(InteractionContext ctx, string TornApiKey)
             {
-                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("Invalid API Key."));
-                return 0;
-            }
+                string apiUrl = $"https://api.torn.com/user/?selections=profile&key={TornApiKey}";
+                string jsonResponse = await requestAPI.GetFrom(apiUrl);
 
-            // Parse the JSON response
-            var jsonData = JObject.Parse(jsonResponse);
-            if (jsonData["error"] != null)
-            {
-                await APIErrorReporting(ctx, jsonData);
-                return 0;
-            }
+                if (jsonResponse == null)
+                {
+                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("Invalid API Key."));
+                    return 0;
+                }
 
-            int factionId = (int)jsonData["faction"]["faction_id"];
+                // Parse the JSON response
+                var jsonData = JObject.Parse(jsonResponse);
+                if (jsonData["error"] != null)
+                {
+                    await APIErrorReporting(ctx, jsonData);
+                    return 0;
+                }
 
-            if (factionId == 0)
-            {
-                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("You are not in a faction. Cannot start war tracker!"));
-                return 0;
+                int factionId = (int)jsonData["faction"]["faction_id"];
+
+                if (factionId == 0)
+                {
+                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("You are not in a faction. Service terminated."));
+                    return 0;
+                }
+                Console.WriteLine($"Faction ID: {factionId}");
+                return (int)factionId;
             }
-            Console.WriteLine($"Faction ID: {factionId}");
-            return (int)factionId;
         }
 
-        public static async Task<JObject> GetAttacksFromFaction(InteractionContext ctx, string TornApiKey,int factionID)
+        public class Faction
         {
-            string apiUrl = $"https://api.torn.com/faction/{factionID}?selections=attacks&key={TornApiKey}";
-            string jsonResponse = await requestAPI.GetFrom(apiUrl);
-
-            if (jsonResponse == null)
+            public static async Task<JObject> GetAttacks(InteractionContext ctx, string TornApiKey, int factionID)
             {
-                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
-        .WithContent("Invalid API Request."));
-                return null;
+                string apiUrl = $"https://api.torn.com/faction/{factionID}?selections=attacks&key={TornApiKey}";
+                string jsonResponse = await requestAPI.GetFrom(apiUrl);
+
+                if (jsonResponse == null)
+                {
+                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+            .WithContent("Invalid API Request."));
+                    return null;
+                }
+
+                // Parse the JSON response
+                var jsonData = JObject.Parse(jsonResponse);
+
+                // Check for error in the response
+                if (jsonData["error"] != null)
+                {
+                    await APIErrorReporting(ctx, jsonData);
+                    return null;
+                }
+
+                return jsonData;
             }
 
-            // Parse the JSON response
-            var jsonData = JObject.Parse(jsonResponse);
+            //public static async Task<JObject> BasicData(string TornApiKey)
+            //{
 
-            // Check for error in the response
-            if (jsonData["error"] != null)
-            {
-                await APIErrorReporting(ctx, jsonData);
-                return null;
-            }
-
-            return jsonData;
+            //}
         }
+
+        public class Torn
+        {
+            public static async Task<long> GetCurrentTimeStamp(string TornApiKey)
+            {
+                string apiUrl = $"https://api.torn.com/user/?selections=profile&key={TornApiKey}";
+                string jsonResponse = await requestAPI.GetFrom(apiUrl);
+
+                if (jsonResponse == null)
+                {
+                    return 0;
+                }
+
+                // Parse the JSON response
+                var jsonData = JObject.Parse(jsonResponse);
+                if (jsonData["error"] != null)
+                {
+                    return 0;
+                }
+                else
+                {
+                    return (long)jsonData["timestamp"];
+                }
+            }
+        }
+
+
+
+
 
     }
 }
