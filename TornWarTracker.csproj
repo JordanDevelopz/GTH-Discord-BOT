@@ -214,7 +214,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Commands\Slash\SlashCommands.cs" />
+    <Compile Include="Commands\Slash\AdminSC.cs" />
+    <Compile Include="Commands\Slash\ChainSC.cs" />
+    <Compile Include="Commands\Slash\DevSC.cs" />
+    <Compile Include="Commands\Slash\GeneralSC.cs" />
+    <Compile Include="Commands\Slash\InitiationSC.cs" />
+    <Compile Include="Commands\Slash\ProgressionSC.cs" />
+    <Compile Include="Commands\Slash\WarSC.cs" />
     <Compile Include="Commands\TornCommands.cs" />
     <Compile Include="config\JSONReader.cs" />
     <Compile Include="Data Structures\tornDataStructures.cs" />

@@ -1,15 +1,10 @@
 ﻿using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
-using Google.Protobuf.WellKnownTypes;
+using MySql.Data.MySqlClient;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using System.Linq;
-using System.Text;
-using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using static TornWarTracker.Torn_API.tornAPIUtils;
 
@@ -19,53 +14,23 @@ namespace TornWarTracker.Torn_API
     {
         public static class PaymentVerification
         {
-            //Method to check if faction has paid for the service
 
-            //each slash command must use this method.
-
-            //check calling user ID, get faction ID, check against db of permitted factions
-            public static async Task<bool> VerifyPayment(InteractionContext ctx, string TornApiKey)
+            public static async Task<bool> VerifyPayment(int factionId, MySqlConnection connection)
             {
-                //connect to db
-
-                //set-up DM
-                var dmChannel = await ctx.Member.CreateDmChannelAsync();
-                //get factionID from user
-                int factionID = await User.GetFactionID(ctx,TornApiKey);
-                if (factionID == 0)
+                string checkPaymentQuery = "SELECT payment_received FROM factions WHERE faction_id = @FactionID LIMIT 1";
+                using (var cmd = new MySqlCommand(checkPaymentQuery, connection))
                 {
-                    return false;
-                }
+                    cmd.Parameters.AddWithValue("@FactionID", factionId);
 
-                //get curent timestamp from Torn
-
-                //check faction ID and timestamp against db
-                // method required!!
-                int dbID = 16057;
-
-                int timestampEnd = 123456789;
-
-                if (factionID == dbID)
-                {
-                    long currenttime = await Torn.GetCurrentTimeStamp(TornApiKey);
-                    if (currenttime > timestampEnd)
+                    var paymentStatus = await cmd.ExecuteScalarAsync();
+                    if (paymentStatus == null || !(bool)paymentStatus)
                     {
-                        await dmChannel.SendMessageAsync("Your DataSpartan services have expired. Please contact the devs to make new payment.");
-                        await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("Service Expired"));
                         return false;
                     }
-                    else
-                    {                        
-                        return true;
-                    }                    
-                }
-                else
-                {
-                    await dmChannel.SendMessageAsync("Your faction has not been registered for DataSpartan services. Please contact the devs");
-                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent("Service Expired"));
-                    return false;
+                    else { return true; }
                 }
             }
+
         }
 
         public static class ErrorCodes
@@ -97,20 +62,30 @@ namespace TornWarTracker.Torn_API
     };
         }
 
-        public static async Task APIErrorReporting(InteractionContext ctx,JObject jsonData)
+        public static async Task APIErrorReporting(JObject jsonData, InteractionContext ctx = null)
         {
+            // Extract the error code from the JSON data
             int errorCode = (int)jsonData["error"]["code"];
+
+            // Look up the error message in the ErrorCodes dictionary
             string errorMessage = ErrorCodes.ErrorDescriptions.ContainsKey(errorCode)
                 ? ErrorCodes.ErrorDescriptions[errorCode]
                 : "Unknown error code.";
-            await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent($"Error {errorCode}: {errorMessage}"));
+
+            // If the context is provided, send a response with the error message
+            if (ctx != null)
+            {
+                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+                    .WithContent($"Error {errorCode}: {errorMessage}"));
+            }
         }
 
         public class User
         {
-            public static async Task<int> GetFactionID(InteractionContext ctx, string TornApiKey)
+            public static async Task<int> GetFactionID(InteractionContext ctx, long TornID, string TornApiKey)
             {
-                string apiUrl = $"https://api.torn.com/user/?selections=profile&key={TornApiKey}";
+                string apiUrl = $"https://api.torn.com/user/{TornID}?key={TornApiKey}";
+                //string apiUrl = $"https://api.torn.com/user/?selections=profile&key={TornApiKey}";
                 string jsonResponse = await requestAPI.GetFrom(apiUrl);
 
                 if (jsonResponse == null)
@@ -123,7 +98,7 @@ namespace TornWarTracker.Torn_API
                 var jsonData = JObject.Parse(jsonResponse);
                 if (jsonData["error"] != null)
                 {
-                    await APIErrorReporting(ctx, jsonData);
+                    await APIErrorReporting(jsonData, ctx);
                     return 0;
                 }
 
@@ -159,17 +134,35 @@ namespace TornWarTracker.Torn_API
                 // Check for error in the response
                 if (jsonData["error"] != null)
                 {
-                    await APIErrorReporting(ctx, jsonData);
+                    await APIErrorReporting(jsonData,ctx);
                     return null;
                 }
 
                 return jsonData;
             }
 
-            //public static async Task<JObject> BasicData(string TornApiKey)
-            //{
+            public static async Task<JObject> BasicData(string TornApiKey,int factionID )
+            {
+                string apiUrl = $"https://api.torn.com/faction/{factionID}?selections=&key={TornApiKey}";
+                string jsonResponse = await requestAPI.GetFrom(apiUrl);
 
-            //}
+                if (jsonResponse == null)
+                {
+                    return null;
+                }
+
+                // Parse the JSON response
+                var jsonData = JObject.Parse(jsonResponse);
+
+                // Check for error in the response
+                if (jsonData["error"] != null)
+                {
+                    await APIErrorReporting(jsonData);
+                    return null;
+                }
+
+                return jsonData;
+            }
         }
 
         public class Torn
@@ -196,10 +189,6 @@ namespace TornWarTracker.Torn_API
                 }
             }
         }
-
-
-
-
 
     }
 }

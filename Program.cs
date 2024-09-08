@@ -135,11 +135,13 @@ namespace TornWarTracker
         {
             Console.WriteLine("Registering SlashCommands...");
             var slashCommandConfig = _discord.UseSlashCommands();
-            slashCommandConfig.RegisterCommands<SlashCommands>(guildId: null);
-            slashCommandConfig.RegisterCommands<SlashCommands.Initiation>(guildId: null);
-            slashCommandConfig.RegisterCommands<SlashCommands.General>(guildId: null);
-            slashCommandConfig.RegisterCommands<SlashCommands.War>(guildId: null);
-            slashCommandConfig.RegisterCommands<SlashCommands.Progression>(guildId: null);
+            slashCommandConfig.RegisterCommands<DevSC>(guildId: null);
+            //slashCommandConfig.RegisterCommands<AdminSC>(guildId: null);
+            slashCommandConfig.RegisterCommands<InitiationSC>(guildId: null);
+            //slashCommandConfig.RegisterCommands<GeneralSC>(guildId: null);
+            slashCommandConfig.RegisterCommands<WarSC>(guildId: null);
+            //slashCommandConfig.RegisterCommands<ChainSC>(guildId: null);
+            //slashCommandConfig.RegisterCommands<ProgressionSC>(guildId: null);
 
             // Error handling for slash commands
             slashCommandConfig.SlashCommandErrored += async (s, e) =>

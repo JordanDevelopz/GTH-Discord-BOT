@@ -30,7 +30,7 @@ namespace TornWarTracker.War
                 {
                     Console.WriteLine($"War tracking iteration {i + 1}");
                     await Task.Delay(TimeSpan.FromSeconds(10)); 
-                                                            // Perform your data gathering and database posting here
+                 // Perform your data gathering and database posting here
 
                 }
 
