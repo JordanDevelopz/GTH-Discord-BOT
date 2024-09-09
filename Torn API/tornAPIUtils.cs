@@ -169,13 +169,16 @@ namespace TornWarTracker.Torn_API
         {
             public static async Task<long> GetCurrentTimeStamp(string TornApiKey)
             {
-                string apiUrl = $"https://api.torn.com/user/?selections=profile&key={TornApiKey}";
+                string apiUrl = $"https://api.torn.com/torn/?selections=timestamp&key={TornApiKey}";
                 string jsonResponse = await requestAPI.GetFrom(apiUrl);
+
+                Console.WriteLine(jsonResponse);
 
                 if (jsonResponse == null)
                 {
                     return 0;
                 }
+
 
                 // Parse the JSON response
                 var jsonData = JObject.Parse(jsonResponse);
@@ -183,10 +186,11 @@ namespace TornWarTracker.Torn_API
                 {
                     return 0;
                 }
-                else
-                {
-                    return (long)jsonData["timestamp"];
-                }
+
+                // Extract the timestamp value
+                long timestamp = jsonData["timestamp"].Value<long>();                
+
+                return timestamp;
             }
         }
 

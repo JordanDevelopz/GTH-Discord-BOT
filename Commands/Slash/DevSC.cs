@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static TornWarTracker.Torn_API.tornAPIUtils;
+using TornWarTracker.Torn_API;
 
 namespace TornWarTracker.Commands.Slash
 {
@@ -73,5 +75,9 @@ namespace TornWarTracker.Commands.Slash
                 await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Database connection failed. Please try again later."));
             }
         }
+
+
+
+
     }
 }

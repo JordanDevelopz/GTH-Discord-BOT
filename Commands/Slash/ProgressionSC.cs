@@ -1,18 +1,19 @@
-﻿using DSharpPlus;
-using DSharpPlus.Entities;
+﻿using DSharpPlus.Entities;
+using DSharpPlus;
 using DSharpPlus.SlashCommands;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using TornWarTracker.Torn_API;
 
 namespace TornWarTracker.Commands.Slash
 {
-    [SlashCommandGroup("Progression", "Perform faction-related tasks")]
-    public class progressionSC : ApplicationCommandModule
+    [SlashCommandGroup("Progression", "progression related tasks")]
+    public class ProgressionSC : ApplicationCommandModule
     {
         // Slash command to track Xanax consumption from a given start date
         [SlashCommand("xanax_progress", "Tracks faction members' Xanax consumption from a given date.")]

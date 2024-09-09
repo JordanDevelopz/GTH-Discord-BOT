@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TornWarTracker.Torn_API;
 using TornWarTracker.War;
+using Google.Protobuf.WellKnownTypes;
 
 namespace TornWarTracker.Commands.Slash
 {
@@ -97,6 +98,62 @@ namespace TornWarTracker.Commands.Slash
                         return;
                     }
 
+                    //check ranked war status of faction
+                    JObject factionbasic = await tornAPIUtils.Faction.BasicData(apiKey, factionID);
+                    if (factionbasic == null)
+                    {
+                        await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+                            .WithContent("War Tracker is unable to obtain your faction data."));
+                        return;
+                    }
+                    // Extract the ranked_wars section
+                    //var rankedWars = factionbasic["ranked_wars"];
+
+                    //long starttime = 0;
+                    //long endtime = 0;
+                    //int target = 0;
+                    //int winner = 0;
+                    //try
+                    //{
+                    //    starttime = (long)factionbasic["ranked_wars"]["start"];
+                    //    endtime = (long)factionbasic["ranked_wars"]["end"];
+                    //    target = (int)factionbasic["ranked_wars"]["target"];
+                    //    winner = (int)factionbasic["ranked_wars"]["winner"];
+
+                    //    if (endtime == 0)
+                    //    {
+
+                    //    }
+                    //}
+                    //catch
+                    //{
+                    //    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+                    //        .WithContent("Your faction is currently not matched for war. Cannot run War Tracker!"));
+                    //    return;
+                    //}
+
+
+
+                    //get current timestamp: epoch in seconds
+                    long currenttime = await tornAPIUtils.Torn.GetCurrentTimeStamp(apiKey);
+                    Console.WriteLine(currenttime);
+
+                    DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(currenttime).DateTime;
+
+                    var embedSuccess = new DiscordEmbedBuilder
+                    {
+                        Title = "Ranked War",
+                        Color = DiscordColor.Red,
+                    };
+                    embedSuccess.AddField("Start Time:", dateTime.ToString());
+                    embedSuccess.AddField("Enemy Faction: ", "Test");
+
+                    await ctx.Channel.SendMessageAsync(embed: embedSuccess);
+
+
+
+                    return;
+
                     await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
                         .WithContent($"War Tracker has been started by {ctx.Member.DisplayName}."));
 
@@ -142,5 +199,46 @@ namespace TornWarTracker.Commands.Slash
                 return;
             }
         }
+
+
+
+
+
+
+
+        //[SlashCommand("test", "testing.")]
+        //[SlashCommandPermissions(Permissions.All)]
+        //public async Task testcommand(InteractionContext ctx, [Option("TornID", "Enter your Torn ID")] long TornID)
+        //{
+        //    DatabaseConnection dbConnection = new DatabaseConnection();
+        //    MySqlConnection connection = dbConnection.GetConnection();
+        //    // Log request URL
+        //    Console.WriteLine($"Requesting Torn API with TornID: {TornID}");
+
+        //    string apiKey = null;
+        //    string getApiKeyQuery = "SELECT Torn_API FROM members WHERE Torn_ID = @TornID LIMIT 1";
+        //    using (var cmd = new MySqlCommand(getApiKeyQuery, connection))
+        //    {
+        //        cmd.Parameters.AddWithValue("@TornID", TornID);
+
+        //        var apiKeyResult = await cmd.ExecuteScalarAsync();
+        //        if (apiKeyResult == null)
+        //        {
+        //            await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+        //                .WithContent("You are not registered. Please use /register to register before starting the War Tracker."));
+        //            return;
+        //        }
+
+        //        apiKey = apiKeyResult.ToString();
+        //    }
+
+
+
+        //    long currenttime = await tornAPIUtils.Torn.GetCurrentTimeStamp(apiKey);
+        //    // Convert the timestamp to DateTime
+        //    DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(currenttime).DateTime;
+        //    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+        //                .WithContent(dateTime.ToString()));
+        //}
     }
 }

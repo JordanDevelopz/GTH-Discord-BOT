@@ -119,7 +119,7 @@ namespace TornWarTracker
             };
 
             _commands = _discord.UseCommandsNext(commandsConfig);
-            _commands.CommandErrored += _cooldownHandler._commands_CommandErrored;
+
             //register the commands
             _commands.RegisterCommands<TornCommands>();
 
@@ -129,8 +129,10 @@ namespace TornWarTracker
             //connect the bot online
             await _discord.ConnectAsync();
             await Task.Delay(Timeout.InfiniteTimeSpan);
-        }      
-        
+        }
+
+
+
         static void SetUpSlashes()
         {
             Console.WriteLine("Registering SlashCommands...");
@@ -141,7 +143,7 @@ namespace TornWarTracker
             //slashCommandConfig.RegisterCommands<GeneralSC>(guildId: null);
             slashCommandConfig.RegisterCommands<WarSC>(guildId: null);
             //slashCommandConfig.RegisterCommands<ChainSC>(guildId: null);
-            //slashCommandConfig.RegisterCommands<ProgressionSC>(guildId: null);
+            slashCommandConfig.RegisterCommands<ProgressionSC>(guildId: null);
 
             // Error handling for slash commands
             slashCommandConfig.SlashCommandErrored += async (s, e) =>
@@ -156,6 +158,7 @@ namespace TornWarTracker
         {
           return Task.CompletedTask;
         }
+
     }
 
 
