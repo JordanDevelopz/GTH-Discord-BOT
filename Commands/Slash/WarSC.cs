@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using TornWarTracker.Torn_API;
 using TornWarTracker.War;
 using Google.Protobuf.WellKnownTypes;
+using DSharpPlus.Interactivity.Extensions;
 
 namespace TornWarTracker.Commands.Slash
 {
@@ -28,6 +29,8 @@ namespace TornWarTracker.Commands.Slash
 
             DatabaseConnection dbConnection = new DatabaseConnection();
             MySqlConnection connection = dbConnection.GetConnection();
+
+            var interactivity = Program._discord.GetInteractivity();
 
             if (connection != null)
             {
@@ -140,22 +143,92 @@ namespace TornWarTracker.Commands.Slash
 
                     DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(currenttime).DateTime;
 
-                    var embedSuccess = new DiscordEmbedBuilder
+                    ////build response embed
+                    //var embedSuccess = new DiscordEmbedBuilder
+                    //{
+                    //    Title = "Ranked War",
+                    //    Color = DiscordColor.Red,
+                    //};
+                    //embedSuccess.AddField("Start Time:", dateTime.ToString());
+                    //embedSuccess.AddField("Enemy Faction: ", "Test");
+
+                    //await ctx.Channel.SendMessageAsync(embed: embedSuccess);
+
+
+
+                    //ask user if they want to start war tracker
+                    var yesButton = new DiscordButtonComponent(ButtonStyle.Success, "yes", "Yes");
+                    var noButton = new DiscordButtonComponent(ButtonStyle.Danger, "no", "No");
+
+                    //var messageBuilder = new DiscordInteractionResponseBuilder()
+                    //    .WithContent("Do you want War Tracker to start automatically when the war starts?")
+                    //    .AddComponents(yesButton, noButton)
+                    //    .AsEphemeral(true);
+
+                    var messageBuilder = new DiscordInteractionResponseBuilder()
+                        .WithContent("Do you want War Tracker to start automatically when the war starts?")
+                        .AddComponents(yesButton, noButton);
+
+
+                    // Send the message with buttons                   
+                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, messageBuilder);
+
+                    // Get the message you just sent
+                    var sentMessage = await ctx.GetOriginalResponseAsync();
+
+                    // Now, wait for a button interaction
+                    
+                    var result = await interactivity.WaitForButtonAsync(sentMessage, ctx.User, TimeSpan.FromMinutes(1));
+
+
+                    // Check if a button was clicked and handle the result
+                    if (result.TimedOut)
                     {
-                        Title = "Ranked War",
-                        Color = DiscordColor.Red,
-                    };
-                    embedSuccess.AddField("Start Time:", dateTime.ToString());
-                    embedSuccess.AddField("Enemy Faction: ", "Test");
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder()
+                            .WithContent("You didn't respond in time. Please try again.")
+                            .AsEphemeral(true));
+                        return;
+                    }
 
-                    await ctx.Channel.SendMessageAsync(embed: embedSuccess);
+                    // Handle which button was pressed
+                    if (result.Result.Id == "yes")
+                    {
+                        // Logic for when the user presses "Yes"
+                        //await ctx.CreateResponseAsync(InteractionResponseType.UpdateMessage);
 
 
+                        //await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, messageBuilder
+                        //.WithContent("War Tracker will start automatically when the war starts.")
+                        //.AsEphemeral(true));
 
-                    return;
+                        //                await ctx.CreateResponseAsync(InteractionResponseType.UpdateMessage, new DiscordInteractionResponseBuilder()
+                        //.WithContent("War Tracker will start automatically when the war starts.")
+                        //.AsEphemeral(true));
+                        
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder()
+                            .WithContent("War Tracker will start automatically when the war starts."));
+                    }
+                    else if (result.Result.Id == "no")
+                    {
+                        // Logic for when the user presses "No"
+                        //await ctx.CreateResponseAsync(InteractionResponseType.UpdateMessage);
 
-                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
-                        .WithContent($"War Tracker has been started by {ctx.Member.DisplayName}."));
+                        
+
+                        //await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, messageBuilder
+                        //.WithContent("War Tracker will not start automatically.")
+                        //.AsEphemeral(true));
+
+                        //                await ctx.CreateResponseAsync(InteractionResponseType.UpdateMessage, new DiscordInteractionResponseBuilder()
+                        //.WithContent("War Tracker will not start automatically.")
+                        //.AsEphemeral(true));
+
+                        //await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder()
+                            .WithContent("War Tracker will not start automatically."));
+                    }
+                    //await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
+
 
                     warTrackerRunning[ctx.Guild.Id] = true;
 

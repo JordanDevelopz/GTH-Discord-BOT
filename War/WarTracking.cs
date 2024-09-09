@@ -23,6 +23,11 @@ namespace TornWarTracker.War
         public async Task Tracker(InteractionContext ctx)
         {
 
+
+
+
+
+
             try
             {
                 // Simulate long-running task

@@ -67,7 +67,7 @@ namespace TornWarTracker
     {
         //private CancellationTokenSource _cts{  get; set; }
         //private IConfigurationRoot _config;
-        private static DiscordClient _discord { get; set; }
+        public static DiscordClient _discord { get; set; }
         private static CommandsNextExtension _commands {  get; set; }
         private static EventHandlingBuilder.MessageHandler _messageHandler;
         private static EventHandlingBuilder.CoolDownHandler _cooldownHandler;
