@@ -16,94 +16,7 @@ namespace TornWarTracker.Commands.Slash
     [SlashCommandGroup("Initiation", "Perform initiation methods")]
     public class InitiationSC : ApplicationCommandModule
     {
-        //[SlashCommand("verifyme", "Verify yourself on the GTH server")]
-        //[SlashCommandPermissions(Permissions.All)] // Ensure the command is available to everyone
-        //public async Task VerifyMeCommand(InteractionContext ctx)
-        //{
-        //    await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
-
-        //    var dmChannel = await ctx.Member.CreateDmChannelAsync();
-        //    await dmChannel.SendMessageAsync("Please provide your Torn ID.");
-
-        //    var interactivity = ctx.Client.GetInteractivity();
-        //    var response = await interactivity.WaitForMessageAsync(x => x.Channel == dmChannel && x.Author == ctx.User, TimeSpan.FromMinutes(1));
-
-        //    if (response.TimedOut)
-        //    {
-        //        await dmChannel.SendMessageAsync("You fell asleep bro?");
-        //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Verification timed out."));
-        //        return;
-        //    }
-
-        //    string tornId = response.Result.Content;
-        //    string apiUrl = $"https://api.torn.com/faction/16057?selections=basic&key={TornApiKey}";
-        //    string jsonResponse = await requestAPI.GetFrom(apiUrl);
-
-        //    if (jsonResponse == null)
-        //    {
-        //        await dmChannel.SendMessageAsync("Error occurred while connecting to the Torn API. Please try again later.");
-        //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error occurred while connecting to the Torn API."));
-        //        return;
-        //    }
-
-        //    var jsonData = JObject.Parse(jsonResponse);
-        //    if (jsonData["error"] != null)
-        //    {
-        //        await tornAPIUtils.APIErrorReporting(jsonData, ctx);
-        //        return;
-        //    }
-
-        //    var members = jsonData["members"];
-        //    var member = members[tornId];
-
-        //    if (member == null)
-        //    {
-        //        await dmChannel.SendMessageAsync("You are not in the correct faction. Verification failed.");
-        //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Verification failed. You are not in the correct faction."));
-        //        return;
-        //    }
-
-        //    var factionRole = (string)member["position"];
-        //    await dmChannel.SendMessageAsync($"Your role in the faction is: {factionRole}");
-
-        //    var guild = ctx.Guild;
-        //    DiscordRole discordRole = null;
-        //    switch (factionRole.ToLower())
-        //    {
-        //        case "leader":
-        //            discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Leader");
-        //            break;
-        //        case "co-leader":
-        //            discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Co-Leader");
-        //            break;
-        //        case "leadership":
-        //            discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Leadership");
-        //            break;
-        //        case "master chief":
-        //            discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Master Chief");
-        //            break;
-        //        case "prometheus":
-        //            discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Prometheus");
-        //            break;
-        //        default:
-        //            discordRole = guild.Roles.Values.FirstOrDefault(r => r.Name == "Spartan");
-        //            break;
-        //    }
-
-        //    if (discordRole != null)
-        //    {
-        //        await ctx.Member.GrantRoleAsync(discordRole);
-        //        await dmChannel.SendMessageAsync($"You have been verified and assigned the role: {discordRole.Name}");
-        //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"You have been verified and assigned the role: {discordRole.Name}"));
-        //    }
-        //    else
-        //    {
-        //        await dmChannel.SendMessageAsync("Unable to assign a role. Please contact Leez or Alaska.");
-        //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Unable to assign a role. Please contact Leez or Alaska."));
-        //    }
-        //}
-
-
+        
         [SlashCommand("register", "Register your Torn information.")]
         public async Task RegisterCommand(InteractionContext ctx,
             [Option("TornID", "Type in your torn ID")] long TornID,
@@ -168,7 +81,7 @@ namespace TornWarTracker.Commands.Slash
                     };
                     embedSuccess.AddField("Torn ID", TornID.ToString());
                     embedSuccess.AddField("Torn Username", TornUsername);
-                    embedSuccess.AddField("Faction Name", factionName);  // Display faction name
+                    embedSuccess.AddField("Faction Name", factionName);
                                                                          //embedSuccess.AddField("API Key", APIKey);
 
                     await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent(embedSuccess.Description).AsEphemeral(true));

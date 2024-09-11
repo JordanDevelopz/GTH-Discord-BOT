@@ -17,6 +17,8 @@ using System.Linq;
 using DSharpPlus.Entities;
 
 using MySql.Data.MySqlClient;
+using System.Diagnostics.Eventing.Reader;
+using ZstdSharp.Unsafe;
 
 namespace TornWarTracker
 {
@@ -99,6 +101,9 @@ namespace TornWarTracker
             _messageHandler = new EventHandlingBuilder.MessageHandler();
             _discord.MessageCreated += _messageHandler._discord_MessageCreated;
 
+            _discord.ComponentInteractionCreated += _discord_ComponentInteractionCreated;
+
+            _discord.ModalSubmitted += ModalEventHandler;
 
             _cooldownHandler = new EventHandlingBuilder.CoolDownHandler();
             
@@ -131,7 +136,7 @@ namespace TornWarTracker
             await Task.Delay(Timeout.InfiniteTimeSpan);
         }
 
-
+        
 
         static void SetUpSlashes()
         {
@@ -144,6 +149,9 @@ namespace TornWarTracker
             slashCommandConfig.RegisterCommands<WarSC>(guildId: null);
             //slashCommandConfig.RegisterCommands<ChainSC>(guildId: null);
             slashCommandConfig.RegisterCommands<ProgressionSC>(guildId: null);
+            slashCommandConfig.RegisterCommands<buttonTests>(guildId: null);
+            slashCommandConfig.RegisterCommands<modalTest>(guildId: null);
+            slashCommandConfig.RegisterCommands<dropdownTests>(guildId: null);
 
             // Error handling for slash commands
             slashCommandConfig.SlashCommandErrored += async (s, e) =>
@@ -157,6 +165,54 @@ namespace TornWarTracker
         private static Task Client_Ready(DiscordClient sender, DSharpPlus.EventArgs.ReadyEventArgs args)
         {
           return Task.CompletedTask;
+        }
+
+        private static async Task _discord_ComponentInteractionCreated(DiscordClient sender, DSharpPlus.EventArgs.ComponentInteractionCreateEventArgs args)
+        {
+            //Dropdown events
+            if (args.Id == "dropdownlist" && args.Interaction.Data.ComponentType == ComponentType.StringSelect)
+            {
+                var options = args.Values;
+                foreach (var option in options)
+                {
+                    switch (option)
+                    {
+                        case "option1":
+                            await args.Interaction.CreateResponseAsync(InteractionResponseType.UpdateMessage, new DiscordInteractionResponseBuilder().WithContent($"{args.User.Username} has selected option 1"));
+                            break;
+                        case "option2":
+                            await args.Interaction.CreateResponseAsync(InteractionResponseType.UpdateMessage, new DiscordInteractionResponseBuilder().WithContent($"{args.User.Username} has selected option 2"));
+                            break;
+                        case "option3":
+                            await args.Interaction.CreateResponseAsync(InteractionResponseType.UpdateMessage, new DiscordInteractionResponseBuilder().WithContent($"{args.User.Username} has selected option 3"));
+                            break;
+                    }
+                }
+
+            }
+
+            //Button Events
+            if (args.Interaction.Data.ComponentType == ComponentType.Button)
+            {
+                switch (args.Interaction.Data.CustomId)
+                {
+                    default:
+                        await args.Interaction.CreateResponseAsync(InteractionResponseType.UpdateMessage, new DiscordInteractionResponseBuilder().WithContent("Thanks!"));
+                        break;
+                }
+            }              
+            
+        }
+
+        private static async Task ModalEventHandler(DiscordClient sender, DSharpPlus.EventArgs.ModalSubmitEventArgs args)
+        {
+            if (args.Interaction.Type == InteractionType.ModalSubmit)
+            {
+                var values = args.Values;
+
+                await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+                    .WithContent($"{args.Interaction.User.Username} submitted the input {values.Values.First()}"));
+            }
         }
 
     }

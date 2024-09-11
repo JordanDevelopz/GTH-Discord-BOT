@@ -1,38 +1,15 @@
 ﻿using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
-using MySql.Data.MySqlClient;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using static TornWarTracker.Torn_API.tornAPIUtils;
 
 namespace TornWarTracker.Torn_API
 {
     public class tornAPIUtils
     {
-        public static class PaymentVerification
-        {
-
-            public static async Task<bool> VerifyPayment(int factionId, MySqlConnection connection)
-            {
-                string checkPaymentQuery = "SELECT payment_received FROM factions WHERE faction_id = @FactionID LIMIT 1";
-                using (var cmd = new MySqlCommand(checkPaymentQuery, connection))
-                {
-                    cmd.Parameters.AddWithValue("@FactionID", factionId);
-
-                    var paymentStatus = await cmd.ExecuteScalarAsync();
-                    if (paymentStatus == null || !(bool)paymentStatus)
-                    {
-                        return false;
-                    }
-                    else { return true; }
-                }
-            }
-
-        }
-
         public static class ErrorCodes
         {
             public static readonly Dictionary<int, string> ErrorDescriptions = new Dictionary<int, string>
@@ -78,6 +55,11 @@ namespace TornWarTracker.Torn_API
                 await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
                     .WithContent($"Error {errorCode}: {errorMessage}"));
             }
+        }
+
+        public class Checks
+        {
+
         }
 
         public class User
