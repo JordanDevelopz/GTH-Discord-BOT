@@ -65,7 +65,7 @@ namespace TornWarTracker.DB
                     return 0;
                 }
 
-                return Convert.ToInt32(query_factionID);
+                return Convert.ToInt32(factionIDResult);
             }
         }
 
@@ -77,6 +77,7 @@ namespace TornWarTracker.DB
                 cmd.Parameters.AddWithValue("@FactionID", factionId);
 
                 var paymentStatus = await cmd.ExecuteScalarAsync();
+
                 if (paymentStatus == null || !(bool)paymentStatus)
                 {
                     return false;

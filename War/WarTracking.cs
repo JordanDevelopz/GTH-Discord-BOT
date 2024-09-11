@@ -20,31 +20,43 @@ namespace TornWarTracker.War
             _warTrackerRunning = warTrackerRunning;
         }
 
-        public async Task Tracker(InteractionContext ctx)
+        public async Task Tracker(InteractionContext ctx,long warStartTime)
         {
 
+            // Create a HashSet of attackID
+            HashSet<long> attackIDSet = new HashSet<long>();
+
+            
+
+            ////perform loop until current time = starttime
+            //while (true)
+            //{
+            //    //get current time in epoch
+            //    DateTimeOffset currentTime = DateTimeOffset.UtcNow;
+            //    // Convert to Unix epoch time
+            //    long unixTime = currentTime.ToUnixTimeSeconds();
+
+            //    long timeUntilTarget = warStartTime - unixTime;
+
+            //    if (timeUntilTarget <= 0)
+            //    {
+            //        Console.WriteLine("Performing the task at: " + DateTime.UtcNow);
+            //        break;
+            //    }
+            //}
+
+            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has begun recording, <@{ctx.User.Id}>."));
 
 
 
 
 
-            try
-            {
-                // Simulate long-running task
-                for (int i = 0; i < 2; i++)
-                {
-                    Console.WriteLine($"War tracking iteration {i + 1}");
-                    await Task.Delay(TimeSpan.FromSeconds(10)); 
-                 // Perform your data gathering and database posting here
 
-                }
+            _warTrackerRunning[ctx.Guild.Id] = false;
 
-                //await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("War Tracker has completed."));
-            }
-            finally
-            {
-                _warTrackerRunning[ctx.Guild.Id] = false;
-            }
+
         }
+
+
     }
 }

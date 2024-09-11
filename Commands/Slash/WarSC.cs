@@ -37,7 +37,7 @@ namespace TornWarTracker.Commands.Slash
             string discordID = ctx.User.Id.ToString();
             string apiKey = null;
             long tornID = 0;
-            int factionID = 16057;
+            int factionID = 0;
 
             DatabaseConnection dbConnection = new DatabaseConnection();
             MySqlConnection connection = dbConnection.GetConnection();
@@ -63,12 +63,12 @@ namespace TornWarTracker.Commands.Slash
                     }
                     Console.WriteLine("tornid done");
 
-                    //factionID = await DBUtils.GetfactionID(discordID,connection);
-                    //if (factionID == 0)
-                    //{
-                    //    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in the faction. Please register first."));
-                    //    return ;
-                    //}
+                    factionID = await DBUtils.GetfactionID(discordID, connection);
+                    if (factionID == 0)
+                    {
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in the faction. Please register first."));
+                        return;
+                    }
                     Console.WriteLine("factionid done");
 
                     //check payment
@@ -133,6 +133,8 @@ namespace TornWarTracker.Commands.Slash
                 return;
             }
 
+            //craete var to hold start time of war
+            long startTime = 0;
 
             try
             {
@@ -143,7 +145,7 @@ namespace TornWarTracker.Commands.Slash
                 {
                     var factions = (JObject)rankedWar["factions"];
                     // Accessing the war data
-                    long startTime = (long)rankedWar["war"]["start"];
+                    startTime = (long)rankedWar["war"]["start"];
                     long endTime = (long)rankedWar["war"]["end"];
                     int target = (int)rankedWar["war"]["target"];
                     int winner = (int)rankedWar["war"]["winner"];
@@ -152,6 +154,11 @@ namespace TornWarTracker.Commands.Slash
                     Console.WriteLine($"War End Time: {endTime}");
                     Console.WriteLine($"War Target: {target}");
                     Console.WriteLine($"War Winner: {winner}");
+
+                    if (endTime != 0)
+                    {
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("The war is over, go to bed!."));
+                    }
 
                     // Accessing the first faction
                     var firstFaction = factions.Properties().ElementAt(0);
@@ -197,12 +204,7 @@ namespace TornWarTracker.Commands.Slash
                     embedSuccess.AddField("Target to win", target.ToString());
 
                     await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embedSuccess));
-
-                    //proceed to war tracker
-                    if (endTime == 0)
-                    {
-
-                    }
+                    
                 }
                 else
                 {
@@ -212,18 +214,23 @@ namespace TornWarTracker.Commands.Slash
             }
             catch
             {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Your faction is not currently matched for war."));
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error Occured with war tracker!"));
                 return;
             }
 
+            if (startTime != 0)
+            {
+                warTrackerRunning[ctx.Guild.Id] = true;
 
-            warTrackerRunning[ctx.Guild.Id] = true;
-
-            var warTracking = new WarTracking(warTrackerRunning);
-            await warTracking.Tracker(ctx);
-
-            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
-
+                var warTracking = new WarTracking(warTrackerRunning);
+                await warTracking.Tracker(ctx, startTime);
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
+            }
+            else
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Could not start war tracker!"));
+                return;
+            }        
         }
 
         [SlashCommand("RW_Tracker_Status", "Use this command to check the status of the enemy")]
@@ -256,7 +263,7 @@ namespace TornWarTracker.Commands.Slash
             string discordID = ctx.User.Id.ToString();
             string apiKey = null;
             long tornID = 0;
-            int factionID = 16057;
+            int factionID = 0;
 
             DatabaseConnection dbConnection = new DatabaseConnection();
             MySqlConnection connection = dbConnection.GetConnection();
@@ -282,12 +289,12 @@ namespace TornWarTracker.Commands.Slash
                     }
                     Console.WriteLine("tornid done");
 
-                    //factionID = await DBUtils.GetfactionID(discordID,connection);
-                    //if (factionID == 0)
-                    //{
-                    //    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in the faction. Please register first."));
-                    //    return ;
-                    //}
+                    factionID = await DBUtils.GetfactionID(discordID, connection);
+                    if (factionID == 0)
+                    {
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in the faction. Please register first."));
+                        return;
+                    }
                     Console.WriteLine("factionid done");
 
                     //check payment
@@ -352,6 +359,9 @@ namespace TornWarTracker.Commands.Slash
 
                     var factions = (JObject)rankedWar["factions"];
                     // Accessing the war data                   
+                    // Accessing the second faction
+                    var firstFaction = rankedWar["factions"].Last as JProperty;
+                    string firstFactionId = firstFaction.Name;
 
                     // Accessing the second faction
                     var secondFaction = rankedWar["factions"].Last as JProperty;
@@ -366,7 +376,7 @@ namespace TornWarTracker.Commands.Slash
                     }
 
                     // Assuming enemyfactionBasic is your JObject and ctx is your command context
-                    using (MemoryStream memoryStream = await WarData.WriteMembersToMemoryStream(enemyfactionBasic))
+                    using (MemoryStream memoryStream = await EnemyWarData.WriteMembersToMemoryStream(enemyfactionBasic))
                     {
                         // Upload the MemoryStream to the Discord channel
                         await discordUtils.UploadMemoryStreamToDiscord(ctx.Client, ctx.Channel, memoryStream, "members.txt");

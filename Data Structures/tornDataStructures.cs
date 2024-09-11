@@ -1,24 +1,55 @@
 ﻿using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using ZstdSharp.Unsafe;
 
 
 namespace TornWarTracker.Data_Structures
 {
     public class tornDataStructures
     {
+
+        public class WarTally
+        {
+            public long warTallyID {  get; set; } // this is the ID of the war            
+            public int FactionID { get; set; }
+            public long TornID { get; set; }
+            public int Hits { get; set; }
+            public int Assists { get; set; }
+            public int Interupts { get; set; }
+            public double respectBest { get; set; }
+            public double respectBonus { get; set; }
+            public double respectGained { get; set; }
+            public double respectLost { get; set; }
+            public double respectNet{ get; set; }
+            public double fairFight { get; set; }
+            public int retalsOut { get; set; }
+            public int retalsIn{ get; set; }
+            public int defendsWon { get; set; }
+            public int defendsInterupt { get; set; }
+            public int defendsLost { get; set; }
+            public int Assist { get; set; }
+            public int outsideHits { get; set; }
+            public int outsideRespect { get; set; }
+            public int outsideLost { get; set; }
+            public int outsideDefendsWon { get; set; }
+            public int outsideDefendsLost { get; set; }
+            public int energyUsedOut { get; set; }
+            public int energyUsedIn { get; set; }
+        }
+
         public class warDataStructures
         {
-            public static long WarIncome { get; set; }
-            public static long XanaxCost { get; set; }
-            public static long MedsCost { get; set; }
-            public static long RevivesCost { get; set; }
-            public static long SpiesCost { get; set; }
-            public static long BountiesCost { get; set; }
-            public static long WarPayout { get; set; }
-            public static int OutsideHitPrice { get; set; }
-            public static int AssistPrice { get; set; }
-            public static int PricePerHit { get; set; }
+            public long WarIncome { get; set; }
+            public long XanaxCost { get; set; }
+            public long MedsCost { get; set; }
+            public long RevivesCost { get; set; }
+            public long SpiesCost { get; set; }
+            public long BountiesCost { get; set; }
+            public long WarPayout { get; set; }
+            public int OutsideHitPrice { get; set; }
+            public int AssistPrice { get; set; }
+            public int PricePerHit { get; set; }
 
             public class FactionRankedWars
             {
@@ -76,7 +107,7 @@ namespace TornWarTracker.Data_Structures
             }
         }
 
-
+        #region Attacks
         public class Attack
         {
             [JsonPropertyName("code")]
@@ -167,5 +198,6 @@ namespace TornWarTracker.Data_Structures
             public Dictionary<string, Attack> AttackList { get; set; }
         }
 
+        #endregion
     }
 }

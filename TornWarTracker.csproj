@@ -243,7 +243,7 @@
     <Compile Include="Commands\Slash\WarSC.cs" />
     <Compile Include="Commands\TornCommands.cs" />
     <Compile Include="config\JSONReader.cs" />
-    <Compile Include="Data Creation\WarData.cs" />
+    <Compile Include="Data Creation\EnemyWarData.cs" />
     <Compile Include="Data Structures\tornDataStructures.cs" />
     <Compile Include="DB\DBUtils.cs" />
     <Compile Include="Discord Utilities\discordUtils.cs" />
