@@ -134,9 +134,7 @@ namespace TornWarTracker
             //connect the bot online
             await _discord.ConnectAsync();
             await Task.Delay(Timeout.InfiniteTimeSpan);
-        }
-
-        
+        }        
 
         static void SetUpSlashes()
         {

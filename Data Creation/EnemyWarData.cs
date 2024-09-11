@@ -25,7 +25,7 @@ namespace TornWarTracker.Data_Creation
                     long lastActionTimestamp = (long)memberDetails["last_action"]["timestamp"];
 
                     DateTime dateTimeStart = DateTimeOffset.FromUnixTimeSeconds(lastActionTimestamp).DateTime;
-                    DateTime dateTimeCurrent = DateTime.UtcNow; // Assuming current time is UTC
+                    DateTime dateTimeCurrent = DateTime.UtcNow;
                     TimeSpan timeDifference = dateTimeCurrent - dateTimeStart;
 
                     string lastactionTime = $"{timeDifference.Days} days, {timeDifference.Hours} hours, {timeDifference.Minutes} minutes, {timeDifference.Seconds} seconds";
