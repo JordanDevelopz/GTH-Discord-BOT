@@ -5,9 +5,11 @@ using Org.BouncyCastle.Asn1.X509;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using TornWarTracker.Commands.Slash;
 using TornWarTracker.Torn_API;
@@ -17,14 +19,14 @@ namespace TornWarTracker.War
 {
     public class WarTracking
     {
-        private ConcurrentDictionary<ulong, bool> _warTrackerRunning;
-
-        public WarTracking(ConcurrentDictionary<ulong, bool> warTrackerRunning)
+        public static class WarTrackerState
         {
-            _warTrackerRunning = warTrackerRunning;
+            public static ConcurrentDictionary<int, bool> WarTrackerRunning = new ConcurrentDictionary<int, bool>();
         }
 
-        public async Task Tracker(InteractionContext ctx, string apiKey, int factionID,JObject members, long warStartTime)
+
+        public async Task Tracker(InteractionContext ctx, string apiKey, int factionID,int enemyFactionID,JObject members, long warStartTime)
+
         {
 
             // Create a HashSet of attackID
@@ -69,6 +71,7 @@ namespace TornWarTracker.War
                 }
                 else if (timeUntilTarget > 60) // More than 1 minutes but less than 10 mins
                 {
+                    update = true;
                     delay = 60000; // 1 min delay
                 }
                 else
@@ -122,9 +125,12 @@ namespace TornWarTracker.War
                 }
             }
 
+            //create long to hold last valid attack time from previous attack log: used to ensure no duplicates
+            long lastAttackTimeFromPrevious = 0;
             //create tally data
             while (true)
             {
+
                 //check if war has ended by getting faction basic data
                 JObject factionBasic = await tornAPIUtils.Faction.BasicData(apiKey, factionID);
                 if (factionBasic == null)
@@ -134,15 +140,45 @@ namespace TornWarTracker.War
                     break;
                 }
 
+                //Use ranked_wars from faction basic to see if war has ended.
                 var rankedWar = (JObject)factionBasic["ranked_wars"].First.First;
                 if (rankedWar != null)
                 {
                     //end time check: if end time = 0 , war is ongoing.
                     endTime = (long)rankedWar["war"]["end"];
                     if (endTime == 0)
+                    {                      
+                        //Get attacks from faction
+                        Attacks factionAttacks = await tornAPIUtils.Faction.GetAttacksAsFactionAttacks(ctx,apiKey, factionID);
+                        if (factionAttacks != null)
+                        {
+                            //do the main tally tasks
+                            WarTallies( factionAttacks,warStartTime, endTime, enemyFactionID,ref lastAttackTimeFromPrevious, ref warTallyDictionary);
+                        }
+                        else
+                        {
+                            erroredout = true;
+                            issue = "Issue getting faction attack data during war tracker. War tracker cancelled!";
+                            break;
+                        }
+                    }
+                    else
                     {
-                        //do the main tally tasks
-
+                        //capture last hits after war has ended: due to 2 second delay, some may be missed otherwise
+                        //Get attacks from faction
+                        Attacks factionAttacks = await tornAPIUtils.Faction.GetAttacksAsFactionAttacks(ctx, apiKey, factionID);
+                        if (factionAttacks != null)
+                        {
+                            //do the main tally tasks
+                            WarTallies(factionAttacks, warStartTime, endTime, enemyFactionID, ref lastAttackTimeFromPrevious, ref warTallyDictionary);
+                        }
+                        else
+                        {
+                            erroredout = true;
+                            issue = "Issue getting faction attack data during war tracker. War tracker cancelled!";
+                            break;
+                        }
+                        break;
                     }
                 }
                 else
@@ -152,22 +188,199 @@ namespace TornWarTracker.War
                     break;
                 }
 
-                await Task.Delay(2000).ContinueWith(t => 
-                {
-                    Console.WriteLine("2 seconds have passed");
-                });
-                
+                await Task.Delay(2000);
+                //await Task.Delay(2000).ContinueWith(t =>
+                //{
+                //    Console.WriteLine("2 seconds have passed");
+                //});
+
             }
 
             if (erroredout)
             {
                 await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker encounterd the following issue: {issue}, <@{ctx.User.Id}>!"));
-                _warTrackerRunning[ctx.Guild.Id] = false;
                 return;
             }
-
-            _warTrackerRunning[ctx.Guild.Id] = false;
         }
+
+        private void WarTallies( Attacks fAttacks, long warStartTime, long warEndtime, int enemyFactionID,ref long lastAttackTimeFromPrevious, ref Dictionary<long, WarTally> warTallyDictionary)
+        {
+            foreach (var attackKVP in fAttacks.AttackList)
+            {
+                Attack atk = attackKVP.Value;
+                //Get AttackID
+
+                //get timestamp
+                long timeStarted = attackKVP.Value.TimestampStarted;
+                //if war endtime !=0, proceed to next step
+                if (warEndtime != 0)
+                {
+                    //if attack time > war start time, proceed to next step
+                    if (timeStarted >= warStartTime)
+                    {
+                        if (warTallyDictionary.ContainsKey(atk.AttackerId))
+                        {
+                            //member made attack
+
+                            WarTally wt;
+                            if (warTallyDictionary[atk.AttackerId] == null)
+                            {
+                                wt = new WarTally();
+                            }
+                            else
+                            {
+                                wt = warTallyDictionary[atk.AttackerId];
+                            }                            
+
+                            switch (atk.Result)
+                            {
+                                case "Assist":
+                                    wt.energyUsedOut += 25;
+                                    if (atk.DefenderFaction == enemyFactionID)
+                                    {                                        
+                                        wt.Assists += 1;                                        
+                                    }
+                                    break;
+                                case "Attacked":
+                                    wt.energyUsedOut += 25;
+                                    if (atk.DefenderFaction == enemyFactionID)
+                                    {
+                                        wt.Hits += 1;
+                                        wt.respectGained += atk.RespectGain;
+                                        wt.respectBonus += atk.Modifiers.ChainBonus;
+                                        wt.fairFight += atk.Modifiers.FairFight;
+                                        wt.retalsOut += (atk.Modifiers.Retaliation > 1) ? 1 : 0;
+                                        wt.overseas += (atk.Modifiers.Overseas > 1) ? 1 : 0;
+                                        wt.leave += 1;
+                                        if (atk.RespectGain > wt.respectBest)
+                                        {
+                                            wt.respectBest = atk.RespectGain;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        wt.outsideHits += 1;
+                                        wt.leave += 1;
+                                    }
+                                    break;
+                                case "Mugged":
+                                    wt.energyUsedOut += 25;
+                                    if (atk.DefenderFaction == enemyFactionID)
+                                    {
+                                        wt.Hits += 1;
+                                        wt.respectGained += atk.RespectGain;
+                                        wt.respectBonus += atk.Modifiers.ChainBonus;
+                                        wt.fairFight += atk.Modifiers.FairFight;
+                                        wt.retalsOut += (atk.Modifiers.Retaliation > 1) ? 1 : 0;
+                                        wt.overseas += (atk.Modifiers.Overseas > 1) ? 1 : 0;
+                                        wt.mugged += 1;
+                                        if (atk.RespectGain > wt.respectBest)
+                                        {
+                                            wt.respectBest = atk.RespectGain;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        wt.outsideHits += 1;
+                                        wt.mugged += 1;
+                                    }
+                                    break;
+                                case "Hospitalized":
+                                    wt.energyUsedOut += 25;
+                                    if (atk.DefenderFaction == enemyFactionID)
+                                    {
+                                        wt.Hits += 1;
+                                        wt.respectGained += atk.RespectGain;
+                                        wt.respectEnemyLost += atk.RespectLoss;
+                                        wt.respectBonus += atk.Modifiers.ChainBonus;
+                                        wt.fairFight += atk.Modifiers.FairFight;
+                                        wt.retalsOut += (atk.Modifiers.Retaliation > 1) ? 1 : 0;
+                                        wt.overseas += (atk.Modifiers.Overseas > 1) ? 1 : 0;
+                                        wt.hospd +=1;
+                                        if (atk.RespectGain > wt.respectBest)
+                                        {
+                                            wt.respectBest = atk.RespectGain;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        wt.outsideHits += 1;
+                                        wt.hospd += 1;
+                                    }
+                                    break;
+                                case "Lost":
+                                    wt.energyUsedOut += 25;
+
+                                    break;
+                                case "Interrupted":
+
+                                    break;
+                                
+                                case "Stalemate":
+                                    wt.energyUsedOut += 25;
+
+                                    break;
+                                case "Timeout":
+                                    wt.energyUsedOut += 25;
+
+                                    break;
+                                case "Escape":
+                                    wt.energyUsedOut += 25;
+
+                                    break;
+                            }
+
+
+
+                            warTallyDictionary[atk.AttackerId] = wt;
+
+                        }
+                        else if (warTallyDictionary.ContainsKey(atk.DefenderId))
+                        {
+                            //member defended
+
+                            WarTally wt;
+                            if (warTallyDictionary[atk.AttackerId] == null)
+                            {
+                                wt = new WarTally();
+                            }
+                            else
+                            {
+                                wt = warTallyDictionary[atk.AttackerId];
+                            }
+
+                            switch (atk.Result)
+                            {
+                                case "Attacked":
+                                    wt.energyUsedIn += 25;
+                                    if (atk.DefenderFaction == enemyFactionID)
+                                    {
+                                        wt.defendsLost += 1;
+                                        wt.respectLost += atk.RespectLoss;
+                                        wt.respectEnemyGain += atk.RespectGain;                                        
+
+       
+                                    }
+                                    else
+                                    {
+                                        wt.outsideHits += 1;
+                                        wt.leave += 1;
+                                    }
+                                    break;
+                            }
+
+
+                            warTallyDictionary[atk.AttackerId] = wt;
+                        }
+
+                    }
+
+                }
+
+            }
+        }
+
+
 
 
     }

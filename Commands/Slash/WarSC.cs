@@ -20,6 +20,8 @@ using TornWarTracker.Data_Creation;
 using TornWarTracker.Discord_Utilities;
 using System.Globalization;
 using System.Net.Http;
+using static TornWarTracker.War.WarTracking;
+using static TornWarTracker.Program;
 
 namespace TornWarTracker.Commands.Slash
 {
@@ -27,7 +29,9 @@ namespace TornWarTracker.Commands.Slash
     public class WarSC : ApplicationCommandModule
     {
         private static HttpClient httpClient = new HttpClient();
-        private static ConcurrentDictionary<ulong, bool> warTrackerRunning = new ConcurrentDictionary<ulong, bool>();
+
+        private readonly WarTracking warTracking = new WarTracking();
+
         [SlashCommand("RankedWarTracker", "Use this command to interact with ranked war tracker")]
         public async Task InitiateWarTracker(InteractionContext ctx)
         {
@@ -37,65 +41,37 @@ namespace TornWarTracker.Commands.Slash
             Console.WriteLine($"WarTracker Command Started: Registered by user {ctx.User.Username}");
             Console.WriteLine($"WarTracker Command Started: Registered from guild {ctx.Guild.Id}");
 
+
+            //Step 1: Check user service
             string discordID = ctx.User.Id.ToString();
             string apiKey = null;
             long tornID = 0;
             int factionID = 0;
 
-            DatabaseConnection dbConnection = new DatabaseConnection();
-            MySqlConnection connection = dbConnection.GetConnection();
-
-            if (connection != null)
+            UserService userService = new UserService();
+            var result = await userService.GetUserDetailsAsync(discordID);
+            if (result.Success)
             {
-                try
-                {
-                    Console.WriteLine(discordID);
-                    apiKey = await DBUtils.GetAPIKey(discordID,connection);
-                    if (apiKey == null)
-                    {
-                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Cannot get you API Key. Please register first."));
-                        return;
-                    }
-                    Console.WriteLine("api done");
+                var userData = result.Data;
+                Console.WriteLine($"API Key: {userData.ApiKey}");
+                Console.WriteLine($"TornID: {userData.TornID}");
+                Console.WriteLine($"FactionID: {userData.FactionID}");
 
-                    tornID = await DBUtils.GetTornID(discordID,connection);
-                    if (tornID == 0)
-                    {
-                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Cannot get your TornID. Please register first."));
-                        return;
-                    }
-                    Console.WriteLine("tornid done");
-
-                    factionID = await DBUtils.GetfactionID(discordID, connection);
-                    if (factionID == 0)
-                    {
-                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in the faction. Please register first."));
-                        return;
-                    }
-                    Console.WriteLine("factionid done");
-
-                    //check payment
-                    bool paid = await DBUtils.VerifyPayment(factionID, connection);
-                    if (!paid)
-                    {
-                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Your faction has not paid for the DataSpartan services. Please ensure the payment is completed before using DataSpartan."));
-                        return;
-                    }
-                    Console.WriteLine("paid done");
-                }
-                catch (Exception ex)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Database Error: {ex.Message}"));
-                    return;
-                }
-                finally
-                {
-                    dbConnection.CloseConnection(connection);
-                }
+                apiKey = userData.ApiKey;
+                tornID = userData.TornID;
+                factionID = userData.FactionID;
             }
             else
             {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Unable to connect to the database. Please try again later."));
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error: {result.ErrorMessage}"));
+                return;
+            }
+
+            //Step 2: perform check to see if this is already running for this faction:
+            if (WarTrackerState.WarTrackerRunning.TryGetValue(factionID, out bool isRunning) && isRunning)
+            {
+                Console.WriteLine("Task already running for this faction.");
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("War Tracker already running for this faction."));
                 return;
             }
 
@@ -111,7 +87,7 @@ namespace TornWarTracker.Commands.Slash
             }
             else
             {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not in a faction!"));
+                //followup handled in getfaction call
                 return;
             }
 
@@ -133,7 +109,7 @@ namespace TornWarTracker.Commands.Slash
 
             //craete long to hold start time of war
             long startTime = 0;
-
+            int enemyFactionID = 0;
             //create initial war message to channel
             try
             {
@@ -146,11 +122,6 @@ namespace TornWarTracker.Commands.Slash
                     long endTime = (long)rankedWar["war"]["end"];
                     int target = (int)rankedWar["war"]["target"];
                     int winner = (int)rankedWar["war"]["winner"];
-
-                    Console.WriteLine($"War Start Time: {startTime}");
-                    Console.WriteLine($"War End Time: {endTime}");
-                    Console.WriteLine($"War Target: {target}");
-                    Console.WriteLine($"War Winner: {winner}");
 
                     if (endTime != 0)
                     {
@@ -172,6 +143,15 @@ namespace TornWarTracker.Commands.Slash
                     int secondFactionChain = (int)secondFaction.Value["chain"];
 
                     Console.WriteLine($"Second Faction ID: {secondFaction.Name}, Name: {secondFactionName}, Score: {secondFactionScore}, Chain: {secondFactionChain}");
+
+                    if (Convert.ToInt32(firstFaction.Name) == factionID)
+                    {
+                        enemyFactionID = Convert.ToInt32(secondFaction.Name);
+                    }
+                    else
+                    {
+                        enemyFactionID = Convert.ToInt32(firstFaction.Name);
+                    }
 
                     //compile in to embed
                     DateTime dateTimeStart = DateTimeOffset.FromUnixTimeSeconds(startTime).DateTime;
@@ -223,16 +203,23 @@ namespace TornWarTracker.Commands.Slash
                 if (members != null)
                 {
                     //mark war tracker as running
-                    warTrackerRunning[ctx.Guild.Id] = true;
-
-                    var warTracking = new WarTracking(warTrackerRunning);
+                    WarTrackerState.WarTrackerRunning[factionID] = true;
 
                     long teststarttime = 1726088699;
 
                     //perform war tracking tasks
-                    await warTracking.Tracker(ctx,apiKey, factionID, members, teststarttime);
-
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
+                    try
+                    {
+                        await warTracking.Tracker(ctx, apiKey, factionID, enemyFactionID, members, startTime);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Console.WriteLine("Task was cancelled.");
+                    }
+                    finally
+                    {
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
+                    }            
 
                     //finished
                 }
@@ -253,7 +240,32 @@ namespace TornWarTracker.Commands.Slash
         [SlashCommandPermissions(Permissions.All)] // Ensure the command is available to everyone
         public async Task StatusWarTracker(InteractionContext ctx)
         {
-            if (warTrackerRunning.TryGetValue(ctx.Guild.Id, out bool isRunning) && isRunning)
+
+            string discordID = ctx.User.Id.ToString();
+            string apiKey = null;
+            long tornID = 0;
+            int factionID = 0;
+
+            UserService userService = new UserService();
+            var result = await userService.GetUserDetailsAsync(discordID);
+            if (result.Success)
+            {
+                var userData = result.Data;
+                Console.WriteLine($"API Key: {userData.ApiKey}");
+                Console.WriteLine($"TornID: {userData.TornID}");
+                Console.WriteLine($"FactionID: {userData.FactionID}");
+
+                apiKey = userData.ApiKey;
+                tornID = userData.TornID;
+                factionID = userData.FactionID;
+            }
+            else
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error: {result.ErrorMessage}"));
+                return;
+            }
+
+            if (WarTrackerState.WarTrackerRunning.TryGetValue(factionID, out bool isRunning) && isRunning)
             {
                 await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
                     .WithContent("War Tracker is already running."));
@@ -274,124 +286,129 @@ namespace TornWarTracker.Commands.Slash
             // Step 1: Acknowledge the command to prevent timeout
             await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
 
-            // Step 2: Get the API key and faction ID of the user invoking the command
-            var dbConnection = new DatabaseConnection();
-            using (MySqlConnection connection = dbConnection.GetConnection())
+            //Step 2: Check user service
+            string discordID = ctx.User.Id.ToString();
+            string apiKey = null;
+            long tornID = 0;
+            int userFactionId = 0;
+
+            UserService userService = new UserService();
+            var result = await userService.GetUserDetailsAsync(discordID);
+            if (result.Success)
             {
-                if (connection == null)
+                var userData = result.Data;
+                Console.WriteLine($"API Key: {userData.ApiKey}");
+                Console.WriteLine($"TornID: {userData.TornID}");
+                Console.WriteLine($"FactionID: {userData.FactionID}");
+
+                apiKey = userData.ApiKey;
+                tornID = userData.TornID;
+                userFactionId = userData.FactionID;
+            }
+            else
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error: {result.ErrorMessage}"));
+                return;
+            }
+
+
+
+            // Step 3: Use user's faction ID to query the ranked wars match-up
+            string rankedWarApiUrl = $"https://api.torn.com/faction/{userFactionId}?key={apiKey}&selections=rankedwars";
+            Console.WriteLine($"Making request to Torn API: {rankedWarApiUrl}");
+
+            string rankedWarResponse = await httpClient.GetStringAsync(rankedWarApiUrl);
+            Console.WriteLine($"Torn API Response: {rankedWarResponse}");
+
+            JObject rankedWarData = JObject.Parse(rankedWarResponse);
+            if (rankedWarData["error"] != null)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from Torn API: {rankedWarData["error"]["error"]}"));
+                return;
+            }
+
+            // Step 4: Get the current ranked war ID and the enemy faction ID
+            var rankedWars = rankedWarData["rankedwars"];
+            if (rankedWars.Count() == 0)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("No active ranked wars found."));
+                return;
+            }
+
+            // Assume we are interested in the first ranked war listed
+            var firstWar = rankedWars.First();
+            string warID = firstWar.Path.Split('.').Last(); // Extract the actual war ID from the path
+            JObject factions = (JObject)firstWar.First["factions"];
+            string enemyFactionId = factions.Properties().First(f => f.Name != userFactionId.ToString()).Name;
+            string enemyFactionName = factions[enemyFactionId]["name"].ToString();
+
+            Console.WriteLine($"Enemy Faction ID: {enemyFactionId}, Enemy Faction Name: {enemyFactionName}");
+
+            // Step 5: Use TornStats API to retrieve the enemy faction's member list
+            string tornStatsApiUrl = $"https://www.tornstats.com/api/v2/{apiKey}/wars/{warID}";
+            Console.WriteLine($"Making request to TornStats API: {tornStatsApiUrl}");
+
+            string tornStatsResponse = await httpClient.GetStringAsync(tornStatsApiUrl);
+            Console.WriteLine($"TornStats API Response: {tornStatsResponse}");
+
+            JObject tornStatsData = JObject.Parse(tornStatsResponse);
+            if (tornStatsData["error"] != null)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from TornStats API: {tornStatsData["error"]["error"]}"));
+                return;
+            }
+
+            // Step 6: Extract enemy faction members
+            string factionKey = tornStatsData["war"]["faction_a_id"].ToString() == enemyFactionId ? "faction_a" : "faction_b";
+            var enemyMembers = tornStatsData[factionKey]["members"].Cast<JProperty>().Select(m => m.Name).ToList();
+            Console.WriteLine($"Enemy members found: {string.Join(", ", enemyMembers)}");
+
+            // Step 7: Query YATA API for each enemy member's estimated stats
+            var userStats = new List<(string Username, long TotalStats)>();
+            foreach (var memberId in enemyMembers)
+            {
+                string yataApiUrl = $"https://yata.yt/api/v1/bs/{memberId}/?key=RHHROUZTAPoHRJdNy";
+                Console.WriteLine($"Making request to YATA API for member {memberId}: {yataApiUrl}");
+
+                string yataApiResponse = await httpClient.GetStringAsync(yataApiUrl);
+                Console.WriteLine($"YATA API Response for member {memberId}: {yataApiResponse}");
+
+                JObject yataData = JObject.Parse(yataApiResponse);
+                var userData = yataData[memberId];
+
+                if (userData != null)
                 {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Unable to connect to the database."));
-                    return;
+                    string username = tornStatsData[factionKey]["members"][memberId]["name"].ToString();
+                    long totalStats = userData["total"].ToObject<long>();
+
+                    userStats.Add((username, totalStats));
+                }
+            }
+
+            // Step 8: Sort the members by total estimated stats in descending order
+            var sortedStats = userStats.OrderByDescending(s => s.TotalStats).ToList();
+
+            // Step 9: Paginate the sorted stats into multiple embeds if necessary
+            int statsPerPage = 25;
+            int currentPage = 0;
+
+            while (currentPage * statsPerPage < sortedStats.Count)
+            {
+                var embed = new DiscordEmbedBuilder()
+                    .WithTitle($"Enemy Faction - {enemyFactionName} (Page {currentPage + 1})")
+                    .WithColor(DiscordColor.Red);
+
+                var statsOnPage = sortedStats.Skip(currentPage * statsPerPage).Take(statsPerPage);
+
+                foreach (var (username, totalStats) in statsOnPage)
+                {
+                    embed.AddField($"{username}", $"Total Estimated Stats: {totalStats.ToString("N0", CultureInfo.InvariantCulture)}", inline: false);
                 }
 
-                // Retrieve API Key and Faction ID
-                string discordID = ctx.User.Id.ToString();
-                string apiKey = await DBUtils.GetAPIKey(discordID, connection);
-                int userFactionId = await DBUtils.GetfactionID(discordID, connection);
+                // Send the embed as a follow-up response
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embed));
 
-                if (string.IsNullOrEmpty(apiKey) || userFactionId == 0)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Could not find your API key or faction ID."));
-                    return;
-                }
-
-                // Step 3: Use user's faction ID to query the ranked wars match-up
-                string rankedWarApiUrl = $"https://api.torn.com/faction/{userFactionId}?key={apiKey}&selections=rankedwars";
-                Console.WriteLine($"Making request to Torn API: {rankedWarApiUrl}");
-
-                string rankedWarResponse = await httpClient.GetStringAsync(rankedWarApiUrl);
-                Console.WriteLine($"Torn API Response: {rankedWarResponse}");
-
-                JObject rankedWarData = JObject.Parse(rankedWarResponse);
-                if (rankedWarData["error"] != null)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from Torn API: {rankedWarData["error"]["error"]}"));
-                    return;
-                }
-
-                // Step 4: Get the current ranked war ID and the enemy faction ID
-                var rankedWars = rankedWarData["rankedwars"];
-                if (rankedWars.Count() == 0)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("No active ranked wars found."));
-                    return;
-                }
-
-                // Assume we are interested in the first ranked war listed
-                var firstWar = rankedWars.First();
-                string warID = firstWar.Path.Split('.').Last(); // Extract the actual war ID from the path
-                JObject factions = (JObject)firstWar.First["factions"];
-                string enemyFactionId = factions.Properties().First(f => f.Name != userFactionId.ToString()).Name;
-                string enemyFactionName = factions[enemyFactionId]["name"].ToString();
-
-                Console.WriteLine($"Enemy Faction ID: {enemyFactionId}, Enemy Faction Name: {enemyFactionName}");
-
-                // Step 5: Use TornStats API to retrieve the enemy faction's member list
-                string tornStatsApiUrl = $"https://www.tornstats.com/api/v2/{apiKey}/wars/{warID}";
-                Console.WriteLine($"Making request to TornStats API: {tornStatsApiUrl}");
-
-                string tornStatsResponse = await httpClient.GetStringAsync(tornStatsApiUrl);
-                Console.WriteLine($"TornStats API Response: {tornStatsResponse}");
-
-                JObject tornStatsData = JObject.Parse(tornStatsResponse);
-                if (tornStatsData["error"] != null)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from TornStats API: {tornStatsData["error"]["error"]}"));
-                    return;
-                }
-
-                // Step 6: Extract enemy faction members
-                string factionKey = tornStatsData["war"]["faction_a_id"].ToString() == enemyFactionId ? "faction_a" : "faction_b";
-                var enemyMembers = tornStatsData[factionKey]["members"].Cast<JProperty>().Select(m => m.Name).ToList();
-                Console.WriteLine($"Enemy members found: {string.Join(", ", enemyMembers)}");
-
-                // Step 7: Query YATA API for each enemy member's estimated stats
-                var userStats = new List<(string Username, long TotalStats)>();
-                foreach (var memberId in enemyMembers)
-                {
-                    string yataApiUrl = $"https://yata.yt/api/v1/bs/{memberId}/?key=RHHROUZTAPoHRJdNy";
-                    Console.WriteLine($"Making request to YATA API for member {memberId}: {yataApiUrl}");
-
-                    string yataApiResponse = await httpClient.GetStringAsync(yataApiUrl);
-                    Console.WriteLine($"YATA API Response for member {memberId}: {yataApiResponse}");
-
-                    JObject yataData = JObject.Parse(yataApiResponse);
-                    var userData = yataData[memberId];
-
-                    if (userData != null)
-                    {
-                        string username = tornStatsData[factionKey]["members"][memberId]["name"].ToString();
-                        long totalStats = userData["total"].ToObject<long>();
-
-                        userStats.Add((username, totalStats));
-                    }
-                }
-
-                // Step 8: Sort the members by total estimated stats in descending order
-                var sortedStats = userStats.OrderByDescending(s => s.TotalStats).ToList();
-
-                // Step 9: Paginate the sorted stats into multiple embeds if necessary
-                int statsPerPage = 25;
-                int currentPage = 0;
-
-                while (currentPage * statsPerPage < sortedStats.Count)
-                {
-                    var embed = new DiscordEmbedBuilder()
-                        .WithTitle($"Enemy Faction - {enemyFactionName} (Page {currentPage + 1})")
-                        .WithColor(DiscordColor.Red);
-
-                    var statsOnPage = sortedStats.Skip(currentPage * statsPerPage).Take(statsPerPage);
-
-                    foreach (var (username, totalStats) in statsOnPage)
-                    {
-                        embed.AddField($"{username}", $"Total Estimated Stats: {totalStats.ToString("N0", CultureInfo.InvariantCulture)}", inline: false);
-                    }
-
-                    // Send the embed as a follow-up response
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embed));
-
-                    currentPage++;
-                }
+                currentPage++;
             }
         }
 
@@ -401,161 +418,171 @@ namespace TornWarTracker.Commands.Slash
             // Step 1: Acknowledge the command to prevent timeout
             await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
 
-            // Step 2: Get the API key and faction ID of the user invoking the command
-            var dbConnection = new DatabaseConnection();
-            using (MySqlConnection connection = dbConnection.GetConnection())
+            //Step 2: Check user service
+            string discordID = ctx.User.Id.ToString();
+            string apiKey = null;
+            long tornID = 0;
+            int userFactionId = 0;
+
+            UserService userService = new UserService();
+            var result = await userService.GetUserDetailsAsync(discordID);
+            if (result.Success)
             {
-                if (connection == null)
+                var userData = result.Data;
+                Console.WriteLine($"API Key: {userData.ApiKey}");
+                Console.WriteLine($"TornID: {userData.TornID}");
+                Console.WriteLine($"FactionID: {userData.FactionID}");
+
+                apiKey = userData.ApiKey;
+                tornID = userData.TornID;
+                userFactionId = userData.FactionID;
+            }
+            else
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error: {result.ErrorMessage}"));
+                return;
+            }
+
+            // Step 3: Use TornStats API to retrieve user's total stats
+            string userStatsApiUrl = $"https://www.tornstats.com/api/v2/{apiKey}/battlestats/graph";
+            Console.WriteLine($"Making request to TornStats API for battle stats: {userStatsApiUrl}");
+            string userStatsResponse = await httpClient.GetStringAsync(userStatsApiUrl);
+            Console.WriteLine($"TornStats API response for battle stats: {userStatsResponse}");
+
+            JObject userStatsData = JObject.Parse(userStatsResponse);
+            if (userStatsData["status"] != null && !userStatsData["status"].ToObject<bool>())
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from TornStats API: {userStatsData["message"]}"));
+                return;
+            }
+
+            // Step 4: Extract the user's total battle stats from TornStats response this is to compate against yata
+            var userBattleStats = userStatsData["data"]
+            .OrderByDescending(stat => stat["timestamp"].ToObject<long>())
+            .First();  //pull the most recent result you ape
+            long userTotalStats = userBattleStats["total"].ToObject<long>();
+            Console.WriteLine($"User {discordID} has total stats: {userTotalStats} (Most recent timestamp)");
+
+
+            // Calculate 20% range might jig this as there estimated but not sure
+            long lowerBound = (long)(userTotalStats * 0.8);
+            long upperBound = (long)(userTotalStats * 1.2);
+            Console.WriteLine($"User's targetable range is: {lowerBound} - {upperBound}");
+
+            //// Step 5: Use user's faction ID to query the ranked wars match-up using torns and ripping the war id
+            //int userFactionId = await DBUtils.GetfactionID(discordID, connection);
+            //Console.WriteLine($"User {discordID} is part of faction {userFactionId}");
+
+            string rankedWarApiUrl = $"https://api.torn.com/faction/{userFactionId}?key={apiKey}&selections=rankedwars";
+            Console.WriteLine($"Making request to Torn API for ranked wars: {rankedWarApiUrl}");
+            string rankedWarResponse = await httpClient.GetStringAsync(rankedWarApiUrl);
+            Console.WriteLine($"Torn API response for ranked wars: {rankedWarResponse}");
+
+            JObject rankedWarData = JObject.Parse(rankedWarResponse);
+            if (rankedWarData["error"] != null)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from Torn API: {rankedWarData["error"]["error"]}"));
+                return;
+            }
+
+            // Step 6: Get the current ranked war ID and the enemy faction ID
+            var rankedWars = rankedWarData["rankedwars"];
+            if (rankedWars.Count() == 0)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("No active ranked wars found."));
+                return;
+            }
+
+            // Extract just the war ID as a number
+            string warID = rankedWars.First.Path.Split('.').Last();
+            JObject factions = (JObject)rankedWars.First.First["factions"];
+            string enemyFactionId = factions.Properties().First(f => f.Name != userFactionId.ToString()).Name;
+            string enemyFactionName = factions[enemyFactionId]["name"].ToString();
+
+            Console.WriteLine($"User is fighting against faction {enemyFactionName} with ID {enemyFactionId}");
+
+            // Step 7: Use TornStats API to retrieve the enemy faction's member list this is a big list btw might be overkill. 
+            string tornStatsApiUrl = $"https://www.tornstats.com/api/v2/{apiKey}/wars/{warID}";
+            Console.WriteLine($"Making request to TornStats API for enemy members: {tornStatsApiUrl}");
+            string tornStatsResponse = await httpClient.GetStringAsync(tornStatsApiUrl);
+            Console.WriteLine($"TornStats API response for enemy members: {tornStatsResponse}");
+
+            JObject tornStatsData = JObject.Parse(tornStatsResponse);
+            if (tornStatsData["error"] != null)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from TornStats API: {tornStatsData["error"]["error"]}"));
+                return;
+            }
+
+            // Step 8: Extract enemy faction members from TornStats API pull from "members" in response
+            string factionKey = tornStatsData["war"]["faction_a_id"].ToString() == enemyFactionId ? "faction_a" : "faction_b";
+            var enemyMembers = tornStatsData[factionKey]["members"].Cast<JProperty>().Select(m => m.Name).ToList();
+            Console.WriteLine($"Enemy members found: {string.Join(", ", enemyMembers)}");
+
+            // Step 9: Query YATA API for each enemy member's estimated stats using user's API key lots of calls may need somekind of delay/limit
+            var targetableStats = new List<(string memberid, string Username, long TotalStats)>();
+            foreach (var memberId in enemyMembers)
+            {
+                // Get the username from TornStats
+                string username = tornStatsData[factionKey]["members"][memberId]["name"].ToString();
+                Console.WriteLine($"Fetching YATA stats for member {memberId} ({username})");
+
+                // Get the stats from YATA using the user's API key
+                string yataApiUrl = $"https://yata.yt/api/v1/bs/{memberId}/?key={apiKey}";
+                Console.WriteLine($"Making request to YATA API for member {memberId}: {yataApiUrl}");
+
+                string yataApiResponse = await httpClient.GetStringAsync(yataApiUrl);
+                Console.WriteLine($"YATA API Response for member {memberId}: {yataApiResponse}");
+
+                JObject yataData = JObject.Parse(yataApiResponse);
+                var userData = yataData[memberId];
+
+                if (userData != null)
                 {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Unable to connect to the database."));
-                    return;
-                }
+                    long totalStats = userData["total"].ToObject<long>();
+                    Console.WriteLine($"Member {username} has total stats: {totalStats}");
 
-                // Retrieve TornStats API Key
-                string discordID = ctx.User.Id.ToString();
-                string apiKey = await DBUtils.GetAPIKey(discordID, connection);
-                Console.WriteLine($"Retrieved API key for user {discordID}: {apiKey}");
-
-                if (string.IsNullOrEmpty(apiKey))
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Could not find your API key."));
-                    return;
-                }
-
-                // Step 3: Use TornStats API to retrieve user's total stats
-                string userStatsApiUrl = $"https://www.tornstats.com/api/v2/{apiKey}/battlestats/graph";
-                Console.WriteLine($"Making request to TornStats API for battle stats: {userStatsApiUrl}");
-                string userStatsResponse = await httpClient.GetStringAsync(userStatsApiUrl);
-                Console.WriteLine($"TornStats API response for battle stats: {userStatsResponse}");
-
-                JObject userStatsData = JObject.Parse(userStatsResponse);
-                if (userStatsData["status"] != null && !userStatsData["status"].ToObject<bool>())
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from TornStats API: {userStatsData["message"]}"));
-                    return;
-                }
-
-                // Step 4: Extract the user's total battle stats from TornStats response this is to compate against yata
-                var userBattleStats = userStatsData["data"]
-                .OrderByDescending(stat => stat["timestamp"].ToObject<long>())
-                .First();  //pull the most recent result you ape
-                long userTotalStats = userBattleStats["total"].ToObject<long>();
-                Console.WriteLine($"User {discordID} has total stats: {userTotalStats} (Most recent timestamp)");
-
-
-                // Calculate 20% range might jig this as there estimated but not sure
-                long lowerBound = (long)(userTotalStats * 0.8);
-                long upperBound = (long)(userTotalStats * 1.2);
-                Console.WriteLine($"User's targetable range is: {lowerBound} - {upperBound}");
-
-                // Step 5: Use user's faction ID to query the ranked wars match-up using torns and ripping the war id
-                int userFactionId = await DBUtils.GetfactionID(discordID, connection);
-                Console.WriteLine($"User {discordID} is part of faction {userFactionId}");
-
-                string rankedWarApiUrl = $"https://api.torn.com/faction/{userFactionId}?key={apiKey}&selections=rankedwars";
-                Console.WriteLine($"Making request to Torn API for ranked wars: {rankedWarApiUrl}");
-                string rankedWarResponse = await httpClient.GetStringAsync(rankedWarApiUrl);
-                Console.WriteLine($"Torn API response for ranked wars: {rankedWarResponse}");
-
-                JObject rankedWarData = JObject.Parse(rankedWarResponse);
-                if (rankedWarData["error"] != null)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from Torn API: {rankedWarData["error"]["error"]}"));
-                    return;
-                }
-
-                // Step 6: Get the current ranked war ID and the enemy faction ID
-                var rankedWars = rankedWarData["rankedwars"];
-                if (rankedWars.Count() == 0)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("No active ranked wars found."));
-                    return;
-                }
-
-                // Extract just the war ID as a number
-                string warID = rankedWars.First.Path.Split('.').Last();
-                JObject factions = (JObject)rankedWars.First.First["factions"];
-                string enemyFactionId = factions.Properties().First(f => f.Name != userFactionId.ToString()).Name;
-                string enemyFactionName = factions[enemyFactionId]["name"].ToString();
-
-                Console.WriteLine($"User is fighting against faction {enemyFactionName} with ID {enemyFactionId}");
-
-                // Step 7: Use TornStats API to retrieve the enemy faction's member list this is a big list btw might be overkill. 
-                string tornStatsApiUrl = $"https://www.tornstats.com/api/v2/{apiKey}/wars/{warID}";
-                Console.WriteLine($"Making request to TornStats API for enemy members: {tornStatsApiUrl}");
-                string tornStatsResponse = await httpClient.GetStringAsync(tornStatsApiUrl);
-                Console.WriteLine($"TornStats API response for enemy members: {tornStatsResponse}");
-
-                JObject tornStatsData = JObject.Parse(tornStatsResponse);
-                if (tornStatsData["error"] != null)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error from TornStats API: {tornStatsData["error"]["error"]}"));
-                    return;
-                }
-
-                // Step 8: Extract enemy faction members from TornStats API pull from "members" in response
-                string factionKey = tornStatsData["war"]["faction_a_id"].ToString() == enemyFactionId ? "faction_a" : "faction_b";
-                var enemyMembers = tornStatsData[factionKey]["members"].Cast<JProperty>().Select(m => m.Name).ToList();
-                Console.WriteLine($"Enemy members found: {string.Join(", ", enemyMembers)}");
-
-                // Step 9: Query YATA API for each enemy member's estimated stats using user's API key lots of calls may need somekind of delay/limit
-                var targetableStats = new List<(string Username, long TotalStats)>();
-                foreach (var memberId in enemyMembers)
-                {
-                    // Get the username from TornStats
-                    string username = tornStatsData[factionKey]["members"][memberId]["name"].ToString();
-                    Console.WriteLine($"Fetching YATA stats for member {memberId} ({username})");
-
-                    // Get the stats from YATA using the user's API key
-                    string yataApiUrl = $"https://yata.yt/api/v1/bs/{memberId}/?key={apiKey}";
-                    Console.WriteLine($"Making request to YATA API for member {memberId}: {yataApiUrl}");
-
-                    string yataApiResponse = await httpClient.GetStringAsync(yataApiUrl);
-                    Console.WriteLine($"YATA API Response for member {memberId}: {yataApiResponse}");
-
-                    JObject yataData = JObject.Parse(yataApiResponse);
-                    var userData = yataData[memberId];
-
-                    if (userData != null)
+                    // Check if the member's stats are within 20% of the user's stats
+                    if (totalStats >= lowerBound && totalStats <= upperBound)
                     {
-                        long totalStats = userData["total"].ToObject<long>();
-                        Console.WriteLine($"Member {username} has total stats: {totalStats}");
-
-                        // Check if the member's stats are within 20% of the user's stats
-                        if (totalStats >= lowerBound && totalStats <= upperBound)
-                        {
-                            Console.WriteLine($"Member {username} is within the user's stats range");
-                            targetableStats.Add((username, totalStats));
-                        }
+                        Console.WriteLine($"Member {username} is within the user's stats range");
+                        targetableStats.Add((memberId, username, totalStats));
                     }
-                }
-
-                // Step 10: Sort the targets by total estimated stats in descending order
-                var sortedTargets = targetableStats.OrderByDescending(s => s.TotalStats).ToList();
-
-                // Step 11: Paginate the sorted targets into multiple embeds if necessary
-                int statsPerPage = 25;
-                int currentPage = 0;
-
-                while (currentPage * statsPerPage < sortedTargets.Count)
-                {
-                    var embed = new DiscordEmbedBuilder()
-                        .WithTitle($"Enemy Targets in Range (Page {currentPage + 1})")
-                        .WithColor(DiscordColor.Red);
-
-                    var statsOnPage = sortedTargets.Skip(currentPage * statsPerPage).Take(statsPerPage);
-
-                    foreach (var (username, totalStats) in statsOnPage)
-                    {
-                        embed.AddField($"{username}", $"Total Estimated Stats: {totalStats.ToString("N0", CultureInfo.InvariantCulture)}", inline: false);
-                    }
-
-                    // Send the embed as a follow-up response
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embed));
-
-                    currentPage++;
                 }
             }
+
+            // Step 10: Sort the targets by total estimated stats in descending order
+            var sortedTargets = targetableStats.OrderByDescending(s => s.TotalStats).ToList();
+
+
+            // Step 11: Paginate the sorted targets into multiple embeds if necessary
+            if (sortedTargets.Count == 0)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"You have no targets in your stat range!"));
+                return;
+            }
+            int statsPerPage = 25;
+            int currentPage = 0;
+
+            while (currentPage * statsPerPage < sortedTargets.Count)
+            {
+                var embed = new DiscordEmbedBuilder()
+                    .WithTitle($"Enemy Targets in Range (Page {currentPage + 1})")
+                    .WithColor(DiscordColor.Red);
+
+                var statsOnPage = sortedTargets.Skip(currentPage * statsPerPage).Take(statsPerPage);
+
+                foreach (var (memberId, username, totalStats) in statsOnPage)
+                {
+                    embed.AddField($"{username}", $"Total Estimated Stats: {totalStats.ToString("N0", CultureInfo.InvariantCulture)}", inline: false);
+                }
+
+                // Send the embed as a follow-up response
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embed));
+
+                currentPage++;
+            }
+           
         }
     }
 }

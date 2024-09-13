@@ -13,6 +13,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using TornWarTracker.Torn_API;
+using static TornWarTracker.Program;
 
 namespace TornWarTracker.Commands.Slash
 {
@@ -37,7 +38,31 @@ namespace TornWarTracker.Commands.Slash
 
             await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource); // Acknowledge the command
 
+            //Step 2: Check user service
             string discordID = ctx.User.Id.ToString();
+            string apiKey = null;
+            long tornID = 0;
+            int userFactionId = 0;
+
+            UserService userService = new UserService();
+            var result = await userService.GetUserDetailsAsync(discordID);
+            if (result.Success)
+            {
+                var userData = result.Data;
+                Console.WriteLine($"API Key: {userData.ApiKey}");
+                Console.WriteLine($"TornID: {userData.TornID}");
+                Console.WriteLine($"FactionID: {userData.FactionID}");
+
+                apiKey = userData.ApiKey;
+                tornID = userData.TornID;
+                userFactionId = userData.FactionID;
+            }
+            else
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Error: {result.ErrorMessage}"));
+                return;
+            }
+
             string factionName = null;
             List<(long TornID, string TornUsername, string TornAPI)> membersList = new List<(long, string, string)>();
 

@@ -69,6 +69,24 @@ namespace TornWarTracker.DB
             }
         }
 
+        //public static async Task<string> GetfactionName(string discordID, MySqlConnection connection)
+        //{
+        //    // Query the database to get the factionName linked with the faction ID
+        //    string query_factionName = @"SELECT factions.faction_name FROM factions WHERE factions.faction_id = @DiscordID";
+        //    using (var cmd = new MySqlCommand(query_factionName, connection))
+        //    {
+        //        cmd.Parameters.AddWithValue("@DiscordID", discordID);
+
+        //        var factionNameResult = await cmd.ExecuteScalarAsync();
+        //        if (factionNameResult == null)
+        //        {
+        //            return null;
+        //        }
+
+        //        return factionNameResult.ToString();
+        //    }
+        //}
+
         public static async Task<bool> VerifyPayment(int factionId, MySqlConnection connection)
         {
             string checkPaymentQuery = "SELECT payment_received FROM factions WHERE faction_id = @FactionID LIMIT 1";

@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
+using System.Collections.ObjectModel;
 using ZstdSharp.Unsafe;
 
 
@@ -8,7 +8,8 @@ namespace TornWarTracker.Data_Structures
 {
     public class tornDataStructures
     {
-
+        public static readonly ReadOnlyCollection<string> AttackResults = new ReadOnlyCollection<string>(
+       new List<string> { "Arrested", "Assist", "Attacked", "Escape", "Hospitalized", "Interrupted", "Looted", "Lost", "Mugged", "Special", "Stalemate", "Timeout" });
         public class WarTally
         {
             public long warTallyID {  get; set; } // this is the ID of the war            
@@ -20,8 +21,10 @@ namespace TornWarTracker.Data_Structures
             public double respectBest { get; set; }
             public double respectBonus { get; set; }
             public double respectGained { get; set; }
-            public double respectLost { get; set; }
+            public double respectLost { get; set; }            
             public double respectNet{ get; set; }
+            public double respectEnemyGain { get; set; }
+            public double respectEnemyLost { get; set; }
             public double fairFight { get; set; }
             public int retalsOut { get; set; }
             public int retalsIn{ get; set; }
@@ -34,8 +37,12 @@ namespace TornWarTracker.Data_Structures
             public int outsideLost { get; set; }
             public int outsideDefendsWon { get; set; }
             public int outsideDefendsLost { get; set; }
+            public int overseas { get; set; }
             public int energyUsedOut { get; set; }
             public int energyUsedIn { get; set; }
+            public int hospd { get; set; }
+            public int mugged { get; set; }
+            public int leave { get; set; }
         }
 
         public class warDataStructures
@@ -110,92 +117,92 @@ namespace TornWarTracker.Data_Structures
         #region Attacks
         public class Attack
         {
-            [JsonPropertyName("code")]
+            [JsonProperty("code")]
             public string Code { get; set; }
 
-            [JsonPropertyName("timestamp_started")]
+            [JsonProperty("timestamp_started")]
             public long TimestampStarted { get; set; }
 
-            [JsonPropertyName("timestamp_ended")]
+            [JsonProperty("timestamp_ended")]
             public long TimestampEnded { get; set; }
 
-            [JsonPropertyName("attacker_id")]
+            [JsonProperty("attacker_id")]
             public int AttackerId { get; set; }
 
-            [JsonPropertyName("attacker_name")]
+            [JsonProperty("attacker_name")]
             public string AttackerName { get; set; }
 
-            [JsonPropertyName("attacker_faction")]
+            [JsonProperty("attacker_faction")]
             public int AttackerFaction { get; set; }
 
-            [JsonPropertyName("attacker_factionname")]
+            [JsonProperty("attacker_factionname")]
             public string AttackerFactionName { get; set; }
 
-            [JsonPropertyName("defender_id")]
+            [JsonProperty("defender_id")]
             public int DefenderId { get; set; }
 
-            [JsonPropertyName("defender_name")]
+            [JsonProperty("defender_name")]
             public string DefenderName { get; set; }
 
-            [JsonPropertyName("defender_faction")]
+            [JsonProperty("defender_faction")]
             public int DefenderFaction { get; set; }
 
-            [JsonPropertyName("defender_factionname")]
+            [JsonProperty("defender_factionname")]
             public string DefenderFactionName { get; set; }
 
-            [JsonPropertyName("result")]
+            [JsonProperty("result")]
             public string Result { get; set; }
 
-            [JsonPropertyName("stealthed")]
+            [JsonProperty("stealthed")]
             public int Stealthed { get; set; }
 
-            [JsonPropertyName("respect")]
+            [JsonProperty("respect")]
             public double Respect { get; set; }
 
-            [JsonPropertyName("chain")]
+            [JsonProperty("chain")]
             public int Chain { get; set; }
 
-            [JsonPropertyName("raid")]
+            [JsonProperty("raid")]
             public int Raid { get; set; }
 
-            [JsonPropertyName("ranked_war")]
+            [JsonProperty("ranked_war")]
             public int RankedWar { get; set; }
 
-            [JsonPropertyName("respect_gain")]
+            [JsonProperty("respect_gain")]
             public double RespectGain { get; set; }
 
-            [JsonPropertyName("respect_loss")]
+            [JsonProperty("respect_loss")]
             public double RespectLoss { get; set; }
 
-            [JsonPropertyName("modifiers")]
+            [JsonProperty("modifiers")]
             public Modifiers Modifiers { get; set; }
         }
 
         public class Modifiers
         {
-            [JsonPropertyName("fair_fight")]
+            [JsonProperty("fair_fight")]
             public double FairFight { get; set; }
 
-            [JsonPropertyName("war")]
+            [JsonProperty("war")]
             public int War { get; set; }
 
-            [JsonPropertyName("retaliation")]
+            [JsonProperty("retaliation")]
             public int Retaliation { get; set; }
 
-            [JsonPropertyName("group_attack")]
+            [JsonProperty("group_attack")]
             public int GroupAttack { get; set; }
 
-            [JsonPropertyName("overseas")]
+            [JsonProperty("overseas")]
             public int Overseas { get; set; }
 
-            [JsonPropertyName("chain_bonus")]
+            [JsonProperty("chain_bonus")]
             public int ChainBonus { get; set; }
         }
 
         public class Attacks
         {
-            [JsonPropertyName("attacks")]
-            public Dictionary<string, Attack> AttackList { get; set; }
+            [JsonProperty("attacks")]
+            public Dictionary<long, Attack> AttackList { get; set; }
         }
 
         #endregion

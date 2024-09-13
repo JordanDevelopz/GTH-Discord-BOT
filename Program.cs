@@ -1,24 +1,20 @@
 ﻿using DSharpPlus;
 using DSharpPlus.CommandsNext;
+using DSharpPlus.Entities;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using Microsoft.Extensions.Logging;
+using MySql.Data.MySqlClient;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TornWarTracker.Commands;
 using TornWarTracker.Commands.Slash;
 using TornWarTracker.config;
+using TornWarTracker.DB;
 using TornWarTracker.Events;
-
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
-using System.Linq;
-using DSharpPlus.Entities;
-
-using MySql.Data.MySqlClient;
-using System.Diagnostics.Eventing.Reader;
-using ZstdSharp.Unsafe;
 
 namespace TornWarTracker
 {
@@ -212,6 +208,81 @@ namespace TornWarTracker
                     .WithContent($"{args.Interaction.User.Username} submitted the input {values.Values.First()}"));
             }
         }
+
+
+
+        public class UserData
+        {
+            public string ApiKey { get; set; }
+            public long TornID { get; set; }
+            public int FactionID { get; set; }
+            public string factionName { get; set; }
+        }
+
+        public class UserService
+        {
+            private readonly DatabaseConnection _dbConnection;
+
+            public UserService()
+            {
+                _dbConnection = new DatabaseConnection();
+            }
+
+            public async Task<(bool Success, UserData Data, string ErrorMessage)> GetUserDetailsAsync(string discordID)
+            {
+                MySqlConnection connection = _dbConnection.GetConnection();
+
+                if (connection == null)
+                {
+                    return (false, null, "Unable to connect to the database. Please try again later.");
+                }
+
+                try
+                {
+                    var userData = new UserData();
+
+                    userData.ApiKey = await DBUtils.GetAPIKey(discordID, connection);
+                    if (userData.ApiKey == null)
+                    {
+                        return (false, null, "Cannot get your API Key. Please register first.");
+                    }
+
+                    userData.TornID = await DBUtils.GetTornID(discordID, connection);
+                    if (userData.TornID == 0)
+                    {
+                        return (false, null, "Cannot get your TornID. Please register first.");
+                    }
+
+                    userData.FactionID = await DBUtils.GetfactionID(discordID, connection);
+                    if (userData.FactionID == 0)
+                    {
+                        return (false, null, "You are not registered in the faction. Please register first.");
+                    }
+
+                    bool paid = await DBUtils.VerifyPayment(userData.FactionID, connection);
+                    if (!paid)
+                    {
+                        return (false, null, "Your faction has not paid for the DataSpartan services. Please ensure the payment is completed before using DataSpartan.");
+                    }
+
+                    if (string.IsNullOrEmpty(userData.ApiKey) || userData.FactionID == 0)
+                    {
+                        return (false, null, "Could not find your API key or faction ID.");
+                    }
+
+                    return (true, userData, null);
+                }
+                catch (Exception ex)
+                {
+                    return (false, null, $"Database Error: {ex.Message}");
+                }
+                finally
+                {
+                    _dbConnection.CloseConnection(connection);
+                }
+            }
+        }
+
 
     }
 

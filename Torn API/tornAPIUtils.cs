@@ -1,10 +1,12 @@
 ﻿using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using static TornWarTracker.Data_Structures.tornDataStructures;
 
 namespace TornWarTracker.Torn_API
 {
@@ -121,6 +123,32 @@ namespace TornWarTracker.Torn_API
                 }
 
                 return jsonData;
+            }
+
+            public static async Task<Attacks> GetAttacksAsFactionAttacks(InteractionContext ctx, string TornApiKey, int factionID)
+            {
+                string apiUrl = $"https://api.torn.com/faction/{factionID}?selections=attacks&key={TornApiKey}";
+                string jsonResponse = await requestAPI.GetFrom(apiUrl);
+
+                if (jsonResponse == null)
+                {
+                    await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
+                        .WithContent("Invalid API Request."));
+                    return null;
+                }
+
+                // Check for error in the response
+                var jsonData = JObject.Parse(jsonResponse);
+                if (jsonData["error"] != null)
+                {
+                    await APIErrorReporting(jsonData);
+                    return null;
+                }
+
+                // Deserialize the JSON response to Attacks class
+                var factionAttacks = JsonConvert.DeserializeObject<Attacks>(jsonResponse);
+
+                return factionAttacks;
             }
 
             public static async Task<JObject> BasicData(string TornApiKey,int factionID )
