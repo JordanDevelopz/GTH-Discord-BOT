@@ -129,7 +129,7 @@ namespace TornWarTracker.Torn_API
             {
                 string apiUrl = $"https://api.torn.com/faction/{factionID}?selections=attacks&key={TornApiKey}";
                 string jsonResponse = await requestAPI.GetFrom(apiUrl);
-
+                Console.WriteLine("factionAttacks jsonResponse ok");
                 if (jsonResponse == null)
                 {
                     await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
@@ -147,7 +147,7 @@ namespace TornWarTracker.Torn_API
 
                 // Deserialize the JSON response to Attacks class
                 var factionAttacks = JsonConvert.DeserializeObject<Attacks>(jsonResponse);
-
+                Console.WriteLine("factionAttacks DeserializeObject ok");
                 return factionAttacks;
             }
 

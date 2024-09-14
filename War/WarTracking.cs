@@ -30,7 +30,7 @@ namespace TornWarTracker.War
         }
 
 
-        public async Task Tracker(InteractionContext ctx, string apiKey,int rankedWarID, int factionID,int enemyFactionID,JObject members, long warStartTime)
+        public async Task<bool> Tracker(InteractionContext ctx, string apiKey,int rankedWarID, int factionID,int enemyFactionID,JObject members, long warStartTime)
 
         {
 
@@ -39,10 +39,10 @@ namespace TornWarTracker.War
 
 
             //perform loop until current time = starttime
-            
+
 
             //bool updateTriggered = false;
-
+            bool update = true;
             while (true)
             {
                 //get current time in epoch
@@ -59,17 +59,21 @@ namespace TornWarTracker.War
                 }
 
                 // Calculate delay based on the time until the target
-
+                
                 //bool update = false;
                 int delay;
                 if (timeUntilTarget > 3600)  // More than 1 hour but less than 1 day
                 {
                     await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker can only be started one hour before war!"));
-                    return;
+                    return true;
                 }
                 else if (timeUntilTarget > 60) // More than 1 minutes but less than 1 hour
                 {
-                    //update = true;
+                    if (update)
+                    {
+                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker is now running. I'll let you know when the war starts!"));
+                    }
+                    update = false;
                     delay = 60000; // 1 min delay
                 }
                 else
@@ -166,6 +170,7 @@ namespace TornWarTracker.War
 
                 //check if war has ended by getting faction basic data
                 JObject factionBasic = await tornAPIUtils.Faction.BasicData(apiKey, factionID);
+                Console.WriteLine("faction basic ok");
                 if (factionBasic == null)
                 {
                     erroredout = true;
@@ -175,22 +180,25 @@ namespace TornWarTracker.War
 
                 //Use ranked_wars from faction basic to see if war has ended.
                 var rankedWar = (JObject)factionBasic["ranked_wars"].First.First;
+                Console.WriteLine("rankedWar basic ok");
                 if (rankedWar != null)
                 {
                     //end time check: if end time = 0 , war is ongoing.
                     endTime = (long)rankedWar["war"]["end"];
+                    Console.WriteLine($"endTime: {endTime}");
                     if (endTime == 0)
                     {
                         //Get attacks from faction
                         Attacks factionAttacks = await tornAPIUtils.Faction.GetAttacksAsFactionAttacks(ctx, apiKey, factionID);
+                        Console.WriteLine("factionAttacks basic ok");
                         if (factionAttacks != null)
                         {
                             //do the main tally tasks
-                            WarTallies(factionAttacks, warStartTime, endTime, enemyFactionID, ref lastAttackTimeFromPrevious, ref warTallyDictionary);
-
+                           WarTallies(factionAttacks, warStartTime, endTime, factionID, enemyFactionID, ref lastAttackTimeFromPrevious, ref warTallyDictionary);
 
                             //add to db here
                             await UpdateWarTallyToDB(ctx, warTallyDictionary);
+
                         }
                         else
                         {
@@ -207,7 +215,7 @@ namespace TornWarTracker.War
                         if (factionAttacks != null)
                         {
                             //do the main tally tasks
-                            WarTallies(factionAttacks, warStartTime, endTime, enemyFactionID, ref lastAttackTimeFromPrevious, ref warTallyDictionary);
+                         WarTallies(factionAttacks, warStartTime, endTime, factionID, enemyFactionID, ref lastAttackTimeFromPrevious, ref warTallyDictionary);
 
                             //add to db here
                             await UpdateWarTallyToDB(ctx, warTallyDictionary);
@@ -229,7 +237,7 @@ namespace TornWarTracker.War
                 }
 
                 //await Task.Delay(2000);
-                await Task.Delay(2000).ContinueWith(t =>
+                await Task.Delay(10000).ContinueWith(t =>
                 {
                     Console.WriteLine("2 seconds have passed");
                 });
@@ -239,17 +247,20 @@ namespace TornWarTracker.War
             if (erroredout)
             {
                 await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker encounterd the following issue: {issue}, <@{ctx.User.Id}>!"));
-                return;
+                return false;
             }
+
+            return false;
         }
 
-        private void WarTallies( Attacks fAttacks, long warStartTime, long warEndtime, int enemyFactionID,ref long lastAttackTimeFromPrevious, ref Dictionary<long, WarTally> warTallyDictionary)
+        private void WarTallies( Attacks fAttacks, long warStartTime, long warEndtime,int factionID, int enemyFactionID,ref long lastAttackTimeFromPrevious, ref Dictionary<long, WarTally> warTallyDictionary)
         {
             foreach (var attackKVP in fAttacks.AttackList)
             {
                 Attack atk = attackKVP.Value;
                 //Get AttackID
 
+                Console.WriteLine("1");
                 //get timestamp
                 long timeStarted = attackKVP.Value.TimestampStarted;
                 if (timeStarted >= lastAttackTimeFromPrevious)
@@ -264,35 +275,37 @@ namespace TornWarTracker.War
                 //if war endtime !=0, proceed to next step
                 if (warEndtime != 0 || timeStarted <= warEndtime)
                 {
+                    Console.WriteLine("2");
                     //if attack time > war start time, proceed to next step
                     if (timeStarted >= warStartTime)
                     {
-                        if (warTallyDictionary.ContainsKey(atk.AttackerId))
+                        Console.WriteLine("3");
+                        if (warTallyDictionary.ContainsKey(Convert.ToInt64(atk.AttackerId)))
                         {
                             //member made attack
-
+                            Console.WriteLine("4");
                             WarTally wt;
-                            if (warTallyDictionary[atk.AttackerId] == null)
+                            if (warTallyDictionary[Convert.ToInt64(atk.AttackerId)] == null)
                             {
                                 wt = new WarTally();
                             }
                             else
                             {
-                                wt = warTallyDictionary[atk.AttackerId];
+                                wt = warTallyDictionary[Convert.ToInt64(atk.AttackerId)];
                             }                            
 
                             switch (atk.Result)
                             {
                                 case "Assist":
                                     wt.energyUsedOut += 25;
-                                    if (atk.DefenderFaction == enemyFactionID)
+                                    if (Convert.ToInt64(atk.DefenderFaction) == enemyFactionID)
                                     {                                        
                                         wt.assists += 1;                                        
                                     }
                                     break;
                                 case "Attacked":
                                     wt.energyUsedOut += 25;
-                                    if (atk.DefenderFaction == enemyFactionID)
+                                    if (Convert.ToInt64(atk.DefenderFaction) == enemyFactionID)
                                     {
                                         wt.hits += 1;
                                         wt.respectGained += atk.RespectGain;
@@ -314,7 +327,7 @@ namespace TornWarTracker.War
                                     break;
                                 case "Mugged":
                                     wt.energyUsedOut += 25;
-                                    if (atk.DefenderFaction == enemyFactionID)
+                                    if (Convert.ToInt64(atk.DefenderFaction) == enemyFactionID)
                                     {
                                         wt.hits += 1;
                                         wt.respectGained += atk.RespectGain;
@@ -336,7 +349,7 @@ namespace TornWarTracker.War
                                     break;
                                 case "Hospitalized":
                                     wt.energyUsedOut += 25;
-                                    if (atk.DefenderFaction == enemyFactionID)
+                                    if (Convert.ToInt64(atk.DefenderFaction) == enemyFactionID)
                                     {
                                         wt.hits += 1;
                                         wt.respectGained += atk.RespectGain;
@@ -359,6 +372,15 @@ namespace TornWarTracker.War
                                     break;
                                 case "Lost":
                                     wt.energyUsedOut += 25;
+                                    if (Convert.ToInt64(atk.DefenderFaction) == enemyFactionID)
+                                    {
+                                        wt.defendsLost += 1;
+                                    }
+                                    else
+                                    {
+                                        wt.outsideDefendsLost += 1;
+                                    }
+                                        
 
                                     break;
                                 case "Interrupted":
@@ -377,49 +399,90 @@ namespace TornWarTracker.War
                                     wt.energyUsedOut += 25;
 
                                     break;
+                                
                             }
 
 
 
-                            warTallyDictionary[atk.AttackerId] = wt;
+                            warTallyDictionary[Convert.ToInt64(atk.AttackerId)] = wt;
 
                         }
-                        else if (warTallyDictionary.ContainsKey(atk.DefenderId))
+                        else if (warTallyDictionary.ContainsKey(Convert.ToInt64(atk.DefenderId)))
                         {
                             //member defended
 
                             WarTally wt;
-                            if (warTallyDictionary[atk.AttackerId] == null)
+                            if (warTallyDictionary[Convert.ToInt64(atk.AttackerId)] == null)
                             {
                                 wt = new WarTally();
                             }
                             else
                             {
-                                wt = warTallyDictionary[atk.AttackerId];
+                                wt = warTallyDictionary[Convert.ToInt64(atk.AttackerId)];
                             }
 
                             switch (atk.Result)
                             {
                                 case "Attacked":
                                     wt.energyUsedIn += 25;
-                                    if (atk.DefenderFaction == enemyFactionID)
+                                    if (Convert.ToInt64(atk.DefenderFaction) == factionID)
                                     {
                                         wt.defendsLost += 1;
                                         wt.respectLost += atk.RespectLoss;
-                                        wt.respectEnemyGain += atk.RespectGain;                                        
-
-       
+                                        wt.respectEnemyGain += atk.RespectGain;
+                                        wt.retalsIn += (atk.Modifiers.Retaliation > 1) ? 1 : 0;
                                     }
                                     else
                                     {
-                                        wt.outsideHits += 1;
-                                        wt.attackLeave += 1;
+                                        wt.outsideDefendsLost += 1;
                                     }
                                     break;
+                                case "Mugged":
+                                    wt.energyUsedIn += 25;
+                                    if (Convert.ToInt64(atk.DefenderFaction) == factionID)
+                                    {
+                                        wt.defendsLost += 1;
+                                        wt.respectLost += atk.RespectLoss;
+                                        wt.respectEnemyGain += atk.RespectGain;
+                                        wt.retalsIn += (atk.Modifiers.Retaliation > 1) ? 1 : 0;
+                                    }
+                                    else
+                                    {
+                                        wt.outsideDefendsLost += 1;
+                                    }
+                                    break;
+                                case "Hospitalized":
+                                    wt.energyUsedIn += 25;
+                                    if (Convert.ToInt64(atk.DefenderFaction) == factionID)
+                                    {
+                                        wt.defendsLost += 1;
+                                        wt.respectLost += atk.RespectLoss;
+                                        wt.respectEnemyGain += atk.RespectGain;
+                                        wt.retalsIn += (atk.Modifiers.Retaliation > 1) ? 1 : 0;
+                                    }
+                                    else
+                                    {
+                                        wt.outsideDefendsLost += 1;
+                                    }
+                                    break;
+                                case "Lost":
+                                    wt.energyUsedIn += 25;
+                                    if (Convert.ToInt64(atk.DefenderFaction) == factionID)
+                                    {
+                                        wt.defendsWon += 1;
+                                    }
+                                    else
+                                    {
+                                        wt.outsideDefendsWon += 1;
+                                    }
+
+                                    break;
+
                             }
 
 
-                            warTallyDictionary[atk.AttackerId] = wt;
+                            warTallyDictionary[Convert.ToInt64(atk.AttackerId)] = wt;
+                            
                         }
 
                     }
@@ -508,7 +571,171 @@ namespace TornWarTracker.War
                 }
             }
         }
-        //private async Task InitialWarTallyToDB(InteractionContext ctx, Dictionary<long, WarTally> warTallyDictionary)
+
+        private async Task UpdateWarTallyToDB(InteractionContext ctx, Dictionary<long, WarTally> warTallyDictionary)
+        {
+            DatabaseConnection dbConnection = new DatabaseConnection();
+            MySqlConnection connection = dbConnection.GetConnection();
+
+            if (connection != null)
+            {
+                try
+                {
+                    foreach (WarTally wt in warTallyDictionary.Values)
+                    {
+                        //    warTallyID = @warTallyID,
+                        //                            cmd.Parameters.AddWithValue("@warTallyID", wt.warTallyID);
+                        //upload to db
+                        //                        string query = @"
+                        //UPDATE WarTally
+                        //SET
+                        //    factionID = @factionID,
+                        //    tornID = @tornID,
+                        //    hits = @hits,
+                        //    assists = @assists,
+                        //    interupts = @interupts,
+                        //    respectBest = @respectBest,
+                        //    respectBonus = @respectBonus,
+                        //    respectGained = @respectGained,
+                        //    respectLost = @respectLost,
+                        //    respectNet = @respectNet,
+                        //    respectEnemyGain = @respectEnemyGain,
+                        //    respectEnemyLost = @respectEnemyLost,
+                        //    fairFight = @fairFight,
+                        //    retalsOut = @retalsOut,
+                        //    retalsIn = @retalsIn,
+                        //    defendsWon = @defendsWon,
+                        //    defendsInterupt = @defendsInterupt,
+                        //    defendsLost = @defendsLost,
+                        //    outsideHits = @outsideHits,
+                        //    outsideRespect = @outsideRespect,
+                        //    outsideLost = @outsideLost,
+                        //    outsideDefendsWon = @outsideDefendsWon,
+                        //    outsideDefendsLost = @outsideDefendsLost,
+                        //    overseas = @overseas,
+                        //    energyUsedOut = @energyUsedOut,
+                        //    energyUsedIn = @energyUsedIn,
+                        //    hospd = @hospd,
+                        //    mugged = @mugged,
+                        //    attackLeave = @attackLeave
+                        //WHERE warTallyID = @warTallyID;
+                        //";
+
+                        string query = @"
+UPDATE WarTally
+SET
+    factionID = @factionID,
+    hits = @hits,
+    assists = @assists,
+    interupts = @interupts,
+    respectBest = @respectBest,
+    respectBonus = @respectBonus,
+    respectGained = @respectGained,
+    respectLost = @respectLost,
+    respectNet = @respectNet,
+    respectEnemyGain = @respectEnemyGain,
+    respectEnemyLost = @respectEnemyLost,
+    fairFight = @fairFight,
+    retalsOut = @retalsOut,
+    retalsIn = @retalsIn,
+    defendsWon = @defendsWon,
+    defendsInterupt = @defendsInterupt,
+    defendsLost = @defendsLost,
+    outsideHits = @outsideHits,
+    outsideRespect = @outsideRespect,
+    outsideLost = @outsideLost,
+    outsideDefendsWon = @outsideDefendsWon,
+    outsideDefendsLost = @outsideDefendsLost,
+    overseas = @overseas,
+    energyUsedOut = @energyUsedOut,
+    energyUsedIn = @energyUsedIn,
+    hospd = @hospd,
+    mugged = @mugged,
+    attackLeave = @attackLeave
+WHERE warTallyID = @warTallyID;
+";
+
+                        //Console.WriteLine($"@warTallyID, {wt.warTallyID}");
+                        Console.WriteLine($"@factionid, {wt.factionID}");
+                        //Console.WriteLine($"@tornID, {wt.tornID}");
+                        Console.WriteLine($"@hits, {wt.hits}");
+                        Console.WriteLine($"@assists, {wt.assists}");
+                        Console.WriteLine($"@interupts, {wt.interupts}");
+                        Console.WriteLine($"@respectBest, {wt.respectBest}");
+                        Console.WriteLine($"@respectBonus, {wt.respectBonus}");
+                        Console.WriteLine($"@respectGained, {wt.respectGained}");
+                        Console.WriteLine($"@respectLost, {wt.respectLost}");
+                        Console.WriteLine($"@respectNet, {wt.respectNet}");
+                        Console.WriteLine($"@respectEnemyGain, {wt.respectEnemyGain}");
+                        Console.WriteLine($"@respectEnemyLost, {wt.respectEnemyLost}");
+                        Console.WriteLine($"@fairFight, {wt.fairFight}");
+                        Console.WriteLine($"@retalsOut, {wt.retalsOut}");
+                        Console.WriteLine($"@retalsIn, {wt.retalsIn}");
+                        Console.WriteLine($"@defendsWon, {wt.defendsWon}");
+                        Console.WriteLine($"@defendsInterupt, {wt.defendsInterupt}");
+                        Console.WriteLine($"@defendsLost, {wt.defendsLost}");
+                        Console.WriteLine($"@outsideHits, {wt.outsideHits}");
+                        Console.WriteLine($"@outsideRespect, {wt.outsideRespect}");
+                        Console.WriteLine($"@outsideLost, {wt.outsideLost}");
+                        Console.WriteLine($"@outsideDefendsWon, {wt.outsideDefendsWon}");
+                        Console.WriteLine($"@outsideDefendsLost, {wt.outsideDefendsLost}");
+                        Console.WriteLine($"@overseas, {wt.overseas}");
+                        Console.WriteLine($"@energyUsedOut, {wt.energyUsedOut}");
+                        Console.WriteLine($"@energyUsedIn, {wt.energyUsedIn}");
+                        Console.WriteLine($"@hospd, {wt.hospd}");
+                        Console.WriteLine($"@mugged, {wt.mugged}");
+                        Console.WriteLine($"@attackLeave, {wt.attackLeave}");
+
+                        Console.WriteLine(query);
+                        using (var cmd = new MySqlCommand(query, connection))
+                        {
+                            cmd.Parameters.AddWithValue("@factionid", wt.factionID);
+                            //cmd.Parameters.AddWithValue("@tornID", wt.tornID);
+                            cmd.Parameters.AddWithValue("@hits", wt.hits);
+                            cmd.Parameters.AddWithValue("@assists", wt.assists);
+                            cmd.Parameters.AddWithValue("@interupts", wt.interupts);
+                            cmd.Parameters.AddWithValue("@respectBest", wt.respectBest);
+                            cmd.Parameters.AddWithValue("@respectBonus", wt.respectBonus);
+                            cmd.Parameters.AddWithValue("@respectGained", wt.respectGained);
+                            cmd.Parameters.AddWithValue("@respectLost", wt.respectLost);
+                            cmd.Parameters.AddWithValue("@respectNet", wt.respectNet);
+                            cmd.Parameters.AddWithValue("@respectEnemyGain", wt.respectEnemyGain);
+                            cmd.Parameters.AddWithValue("@respectEnemyLost", wt.respectEnemyLost);
+                            cmd.Parameters.AddWithValue("@fairFight", wt.fairFight);
+                            cmd.Parameters.AddWithValue("@retalsOut", wt.retalsOut);
+                            cmd.Parameters.AddWithValue("@retalsIn", wt.retalsIn);
+                            cmd.Parameters.AddWithValue("@defendsWon", wt.defendsWon);
+                            cmd.Parameters.AddWithValue("@defendsInterupt", wt.defendsInterupt);
+                            cmd.Parameters.AddWithValue("@defendsLost", wt.defendsLost);
+                            cmd.Parameters.AddWithValue("@outsideHits", wt.outsideHits);
+                            cmd.Parameters.AddWithValue("@outsideRespect", wt.outsideRespect);
+                            cmd.Parameters.AddWithValue("@outsideLost", wt.outsideLost);
+                            cmd.Parameters.AddWithValue("@outsideDefendsWon", wt.outsideDefendsWon);
+                            cmd.Parameters.AddWithValue("@outsideDefendsLost", wt.outsideDefendsLost);
+                            cmd.Parameters.AddWithValue("@overseas", wt.overseas);
+                            cmd.Parameters.AddWithValue("@energyUsedOut", wt.energyUsedOut);
+                            cmd.Parameters.AddWithValue("@energyUsedIn", wt.energyUsedIn);
+                            cmd.Parameters.AddWithValue("@hospd", wt.hospd);
+                            cmd.Parameters.AddWithValue("@mugged", wt.mugged);
+                            cmd.Parameters.AddWithValue("@attackLeave", wt.attackLeave);
+
+                            await cmd.ExecuteNonQueryAsync();
+                        }
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error inserting into the database: {ex.Message}");
+                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("An error occurred while updating wartally to database"));
+                }
+                finally
+                {
+                    dbConnection.CloseConnection(connection);
+                }
+            }
+        }
+        //private async Task UpdateWarTallyToDB(InteractionContext ctx, Dictionary<long, WarTally> warTallyDictionary)
         //{
         //    DatabaseConnection dbConnection = new DatabaseConnection();
         //    MySqlConnection connection = dbConnection.GetConnection();
@@ -517,13 +744,13 @@ namespace TornWarTracker.War
         //    {
         //        try
         //        {
-        //            foreach (WarTally wt in warTallyDictionary.Values)
+        //            foreach (WarTally wt in warTallyDictionary.Values )
         //            {
         //                //upload to db
-        //                string query = "INSERT INTO WarTally (warTallyID, factionid, tornID, hits, assists, interupts, respectBest, respectBonus, respectGained, respectLost, respectNet, respectEnemyGain, respectEnemyLost, fairFight, retalsOut, retalsIn, defendsWon, defendsInterupt, defendsLost, outsideHits, outsideRespect, outsideLost, outsideDefendsWon, outsideDefendsLost, overseas, energyUsedOut, energyUsedIn, hospd, mugged, attackLeave)" +
+        //                string query = "UPDATE SET WarTally (warTallyID, factionid, tornID, hits, assists, interupts, respectBest, respectBonus, respectGained, respectLost, respectNet, respectEnemyGain, respectEnemyLost, fairFight, retalsOut, retalsIn, defendsWon, defendsInterupt, defendsLost, outsideHits, outsideRespect, outsideLost, outsideDefendsWon, outsideDefendsLost, overseas, energyUsedOut, energyUsedIn, hospd, mugged, attackLeave)" +
         //                               "VALUES (@warTallyID, @factionid, @tornID, @hits, @assists, @interupts, @respectBest, @respectBonus, @respectGained, @respectLost, @respectNet, @respectEnemyGain, @respectEnemyLost, @fairFight, @retalsOut, @retalsIn, @defendsWon, @defendsInterupt, @defendsLost, @outsideHits, @outsideRespect, @outsideLost, @outsideDefendsWon, @outsideDefendsLost, @overseas, @energyUsedOut, @energyUsedIn, @hospd, @mugged, @attackLeave)";
-        //                Console.WriteLine(query);
 
+        //                Console.WriteLine(query);
         //                using (var cmd = new MySqlCommand(query, connection))
         //                {
         //                    cmd.Parameters.AddWithValue("@warTallyID", wt.warTallyID);
@@ -531,7 +758,6 @@ namespace TornWarTracker.War
         //                    cmd.Parameters.AddWithValue("@tornID", wt.tornID);
         //                    cmd.Parameters.AddWithValue("@hits", wt.hits);
         //                    cmd.Parameters.AddWithValue("@assists", wt.assists);
-        //                    cmd.Parameters.AddWithValue("@interupts", wt.interupts);
         //                    cmd.Parameters.AddWithValue("@respectBest", wt.respectBest);
         //                    cmd.Parameters.AddWithValue("@respectBonus", wt.respectBonus);
         //                    cmd.Parameters.AddWithValue("@respectGained", wt.respectGained);
@@ -565,7 +791,7 @@ namespace TornWarTracker.War
         //        catch (Exception ex)
         //        {
         //            Console.WriteLine($"Error inserting into the database: {ex.Message}");
-        //            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("An error occurred while pushing wartally to database"));
+        //            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("An error occurred while updating wartally to database"));
         //        }
         //        finally
         //        {
@@ -573,69 +799,6 @@ namespace TornWarTracker.War
         //        }
         //    }
         //}
-        private async Task UpdateWarTallyToDB(InteractionContext ctx, Dictionary<long, WarTally> warTallyDictionary)
-        {
-            DatabaseConnection dbConnection = new DatabaseConnection();
-            MySqlConnection connection = dbConnection.GetConnection();
-
-            if (connection != null)
-            {
-                try
-                {
-                    foreach (WarTally wt in warTallyDictionary.Values )
-                    {
-                        //upload to db
-                        string query = "UPDATE SET WarTally (warTallyID, factionid, tornID, hits, assists, interupts, respectBest, respectBonus, respectGained, respectLost, respectNet, respectEnemyGain, respectEnemyLost, fairFight, retalsOut, retalsIn, defendsWon, defendsInterupt, defendsLost, outsideHits, outsideRespect, outsideLost, outsideDefendsWon, outsideDefendsLost, overseas, energyUsedOut, energyUsedIn, hospd, mugged, attackLeave)" +
-                                       "VALUES (@warTallyID, @factionid, @tornID, @hits, @assists, @interupts, @respectBest, @respectBonus, @respectGained, @respectLost, @respectNet, @respectEnemyGain, @respectEnemyLost, @fairFight, @retalsOut, @retalsIn, @defendsWon, @defendsInterupt, @defendsLost, @outsideHits, @outsideRespect, @outsideLost, @outsideDefendsWon, @outsideDefendsLost, @overseas, @energyUsedOut, @energyUsedIn, @hospd, @mugged, @attackLeave)";
-
-                        using (var cmd = new MySqlCommand(query, connection))
-                        {
-                            cmd.Parameters.AddWithValue("@warTallyID", wt.warTallyID);
-                            cmd.Parameters.AddWithValue("@factionid", wt.factionID);
-                            cmd.Parameters.AddWithValue("@tornID", wt.tornID);
-                            cmd.Parameters.AddWithValue("@hits", wt.hits);
-                            cmd.Parameters.AddWithValue("@assists", wt.assists);
-                            cmd.Parameters.AddWithValue("@respectBest", wt.respectBest);
-                            cmd.Parameters.AddWithValue("@respectBonus", wt.respectBonus);
-                            cmd.Parameters.AddWithValue("@respectGained", wt.respectGained);
-                            cmd.Parameters.AddWithValue("@respectLost", wt.respectLost);
-                            cmd.Parameters.AddWithValue("@respectNet", wt.respectNet);
-                            cmd.Parameters.AddWithValue("@respectEnemyGain", wt.respectEnemyGain);
-                            cmd.Parameters.AddWithValue("@respectEnemyLost", wt.respectEnemyLost);
-                            cmd.Parameters.AddWithValue("@fairFight", wt.fairFight);
-                            cmd.Parameters.AddWithValue("@retalsOut", wt.retalsOut);
-                            cmd.Parameters.AddWithValue("@retalsIn", wt.retalsIn);
-                            cmd.Parameters.AddWithValue("@defendsWon", wt.defendsWon);
-                            cmd.Parameters.AddWithValue("@defendsInterupt", wt.defendsInterupt);
-                            cmd.Parameters.AddWithValue("@defendsLost", wt.defendsLost);
-                            cmd.Parameters.AddWithValue("@outsideHits", wt.outsideHits);
-                            cmd.Parameters.AddWithValue("@outsideRespect", wt.outsideRespect);
-                            cmd.Parameters.AddWithValue("@outsideLost", wt.outsideLost);
-                            cmd.Parameters.AddWithValue("@outsideDefendsWon", wt.outsideDefendsWon);
-                            cmd.Parameters.AddWithValue("@outsideDefendsLost", wt.outsideDefendsLost);
-                            cmd.Parameters.AddWithValue("@overseas", wt.overseas);
-                            cmd.Parameters.AddWithValue("@energyUsedOut", wt.energyUsedOut);
-                            cmd.Parameters.AddWithValue("@energyUsedIn", wt.energyUsedIn);
-                            cmd.Parameters.AddWithValue("@hospd", wt.hospd);
-                            cmd.Parameters.AddWithValue("@mugged", wt.mugged);
-                            cmd.Parameters.AddWithValue("@attackLeave", wt.attackLeave);
-
-                            await cmd.ExecuteNonQueryAsync();
-                        }
-                    }
-                    
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error inserting into the database: {ex.Message}");
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("An error occurred while updating wartally to database"));
-                }
-                finally
-                {
-                    dbConnection.CloseConnection(connection);
-                }
-            }
-        }
 
     }
 }

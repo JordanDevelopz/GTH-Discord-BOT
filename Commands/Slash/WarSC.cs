@@ -214,12 +214,12 @@ namespace TornWarTracker.Commands.Slash
                     WarTrackerState.WarTrackerRunning[factionID] = true;
 
                     long teststarttime = 1726334915;
-
+                    bool cannotStartYet = false;
                     //perform war tracking tasks
                     try
                     {
-                        //await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, startTime);
-                        await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, teststarttime);
+                        cannotStartYet = await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, startTime);
+                        //await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, teststarttime);
                     }
                     catch (OperationCanceledException)
                     {
@@ -227,7 +227,11 @@ namespace TornWarTracker.Commands.Slash
                     }
                     finally
                     {
-                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
+                        if (!cannotStartYet)
+                        {
+                            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
+                        }                       
+                        
                     }            
 
                     //finished

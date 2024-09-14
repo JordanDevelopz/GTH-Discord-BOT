@@ -126,25 +126,25 @@ namespace TornWarTracker.Data_Structures
             public long TimestampEnded { get; set; }
 
             [JsonProperty("attacker_id")]
-            public int AttackerId { get; set; }
+            public string AttackerId { get; set; }
 
             [JsonProperty("attacker_name")]
             public string AttackerName { get; set; }
 
             [JsonProperty("attacker_faction")]
-            public int AttackerFaction { get; set; }
+            public string AttackerFaction { get; set; }
 
             [JsonProperty("attacker_factionname")]
             public string AttackerFactionName { get; set; }
 
             [JsonProperty("defender_id")]
-            public int DefenderId { get; set; }
+            public string DefenderId { get; set; }
 
             [JsonProperty("defender_name")]
             public string DefenderName { get; set; }
 
             [JsonProperty("defender_faction")]
-            public int DefenderFaction { get; set; }
+            public string DefenderFaction { get; set; }
 
             [JsonProperty("defender_factionname")]
             public string DefenderFactionName { get; set; }
@@ -183,19 +183,19 @@ namespace TornWarTracker.Data_Structures
             public double FairFight { get; set; }
 
             [JsonProperty("war")]
-            public int War { get; set; }
+            public double War { get; set; }
 
             [JsonProperty("retaliation")]
-            public int Retaliation { get; set; }
+            public double Retaliation { get; set; }
 
             [JsonProperty("group_attack")]
-            public int GroupAttack { get; set; }
+            public double GroupAttack { get; set; }
 
             [JsonProperty("overseas")]
-            public int Overseas { get; set; }
+            public double Overseas { get; set; }
 
             [JsonProperty("chain_bonus")]
-            public int ChainBonus { get; set; }
+            public double ChainBonus { get; set; }
         }
 
         public class Attacks
