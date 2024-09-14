@@ -110,12 +110,20 @@ namespace TornWarTracker.Commands.Slash
             //craete long to hold start time of war
             long startTime = 0;
             int enemyFactionID = 0;
+            int rankedWarID = 0;
             //create initial war message to channel
             try
             {
                 var rankedWar = (JObject)factionBasic["ranked_wars"].First.First;
+                
+
                 if (rankedWar != null)
                 {
+                    var rankedWarQuery = factionBasic["ranked_wars"].First.Path;
+                    var rankedWarKey = rankedWarQuery.Split('.').Last();
+                    Console.WriteLine($"rankedWarQuery {rankedWarKey}");
+                    rankedWarID = Convert.ToInt32(rankedWarKey);
+
                     var factions = (JObject)rankedWar["factions"];
                     // Accessing the war data
                     startTime = (long)rankedWar["war"]["start"];
@@ -205,12 +213,13 @@ namespace TornWarTracker.Commands.Slash
                     //mark war tracker as running
                     WarTrackerState.WarTrackerRunning[factionID] = true;
 
-                    long teststarttime = 1726088699;
+                    long teststarttime = 1726334915;
 
                     //perform war tracking tasks
                     try
                     {
-                        await warTracking.Tracker(ctx, apiKey, factionID, enemyFactionID, members, startTime);
+                        //await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, startTime);
+                        await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, teststarttime);
                     }
                     catch (OperationCanceledException)
                     {

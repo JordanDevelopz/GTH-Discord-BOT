@@ -13,11 +13,11 @@ namespace TornWarTracker.Data_Structures
         public class WarTally
         {
             public long warTallyID {  get; set; } // this is the ID of the war            
-            public int FactionID { get; set; }
-            public long TornID { get; set; }
-            public int Hits { get; set; }
-            public int Assists { get; set; }
-            public int Interupts { get; set; }
+            public int factionID { get; set; }
+            public long tornID { get; set; }
+            public int hits { get; set; }
+            public int assists { get; set; }
+            public int interupts { get; set; }
             public double respectBest { get; set; }
             public double respectBonus { get; set; }
             public double respectGained { get; set; }
@@ -31,7 +31,6 @@ namespace TornWarTracker.Data_Structures
             public int defendsWon { get; set; }
             public int defendsInterupt { get; set; }
             public int defendsLost { get; set; }
-            public int Assist { get; set; }
             public int outsideHits { get; set; }
             public int outsideRespect { get; set; }
             public int outsideLost { get; set; }
@@ -42,7 +41,7 @@ namespace TornWarTracker.Data_Structures
             public int energyUsedIn { get; set; }
             public int hospd { get; set; }
             public int mugged { get; set; }
-            public int leave { get; set; }
+            public int attackLeave { get; set; }
         }
 
         public class warDataStructures

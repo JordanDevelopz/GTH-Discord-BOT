@@ -267,7 +267,7 @@ namespace TornWarTracker.Commands.Slash
 
             if (statsData == null)
             {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error getting stats data."));
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error getting stats data from Torn Stats API. Check you are using the correct API Key."));
                 return;
             }
 
