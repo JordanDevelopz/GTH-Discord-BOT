@@ -265,6 +265,12 @@ namespace TornWarTracker.Commands.Slash
             // Example: Get battle stats over time 
             JArray statsData = (JArray)jsonData["data"];
 
+            if (statsData == null)
+            {
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error getting stats data."));
+                return;
+            }
+
             // Prepare data for plotting
             var plotModel = new PlotModel
             {

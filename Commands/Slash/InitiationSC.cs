@@ -20,7 +20,7 @@ namespace TornWarTracker.Commands.Slash
         public async Task RegisterCommand(InteractionContext ctx,
       [Option("TornID", "Type in your torn ID")] long TornID,
       [Option("TornUsername", "Type in your torn username")] string TornUsername,
-      [Option("APIKey", "Type in your API key")] string APIKey)
+      [Option("APIKey", "Type in your API key (Must use Torn Stats API Key)")] string APIKey)
         {
             await ctx.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
 
@@ -88,7 +88,7 @@ namespace TornWarTracker.Commands.Slash
                     embedSuccess.AddField("Torn Username", TornUsername);
                     embedSuccess.AddField("Faction Name", factionName);  // Display faction name
 
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent(embedSuccess.Description).AsEphemeral(true));
+                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embedSuccess).AsEphemeral(true));
                 }
                 catch (Exception ex)
                 {
