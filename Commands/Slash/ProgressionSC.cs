@@ -43,6 +43,7 @@ namespace TornWarTracker.Commands.Slash
             string apiKey = null;
             long tornID = 0;
             int userFactionId = 0;
+            string factionName = null;
 
             UserService userService = new UserService();
             var result = await userService.GetUserDetailsAsync(discordID);
@@ -56,6 +57,7 @@ namespace TornWarTracker.Commands.Slash
                 apiKey = userData.ApiKey;
                 tornID = userData.TornID;
                 userFactionId = userData.FactionID;
+                factionName = userData.factionName;
             }
             else
             {
@@ -63,71 +65,71 @@ namespace TornWarTracker.Commands.Slash
                 return;
             }
 
-            string factionName = null;
+            
             List<(long TornID, string TornUsername, string TornAPI)> membersList = new List<(long, string, string)>();
 
-            // Step 1: Fetch faction ID and members from the database based on Discord ID
-            DatabaseConnection dbConnection = new DatabaseConnection();
-            MySqlConnection connection = dbConnection.GetConnection();
+            //// Step 1: Fetch faction ID and members from the database based on Discord ID
+            //DatabaseConnection dbConnection = new DatabaseConnection();
+            //MySqlConnection connection = dbConnection.GetConnection();
 
-            if (connection != null)
-            {
-                try
-                {
-                    // Fetch the faction ID and faction name using Discord ID
-                    string query = @"SELECT factions.faction_id, factions.faction_name 
-                                     FROM factions 
-                                     JOIN members ON factions.faction_id = members.faction_id 
-                                     WHERE members.discord_id = @DiscordID";
-                    using (var cmd = new MySqlCommand(query, connection))
-                    {
-                        cmd.Parameters.AddWithValue("@DiscordID", discordID);
-                        using (var reader = await cmd.ExecuteReaderAsync())
-                        {
-                            if (reader.Read())
-                            {
-                                factionName = reader.GetString(reader.GetOrdinal("faction_name"));
-                            }
-                            else
-                            {
-                                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in a faction."));
-                                return;
-                            }
-                        }
-                    }
+            //if (connection != null)
+            //{
+            //    try
+            //    {
+            //        // Fetch the faction ID and faction name using Discord ID
+            //        string query = @"SELECT factions.faction_id, factions.faction_name 
+            //                         FROM factions 
+            //                         JOIN members ON factions.faction_id = members.faction_id 
+            //                         WHERE members.discord_id = @DiscordID";
+            //        using (var cmd = new MySqlCommand(query, connection))
+            //        {
+            //            cmd.Parameters.AddWithValue("@DiscordID", discordID);
+            //            using (var reader = await cmd.ExecuteReaderAsync())
+            //            {
+            //                if (reader.Read())
+            //                {
+            //                    factionName = reader.GetString(reader.GetOrdinal("faction_name"));
+            //                }
+            //                else
+            //                {
+            //                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("You are not registered in a faction."));
+            //                    return;
+            //                }
+            //            }
+            //        }
 
-                    // Fetch faction members
-                    string memberQuery = "SELECT Torn_ID, Torn_UserName, Torn_API FROM members WHERE faction_id = (SELECT faction_id FROM members WHERE discord_id = @DiscordID)";
-                    using (var cmd = new MySqlCommand(memberQuery, connection))
-                    {
-                        cmd.Parameters.AddWithValue("@DiscordID", discordID);
-                        using (var reader = await cmd.ExecuteReaderAsync())
-                        {
-                            while (reader.Read())
-                            {
-                                long tornId = reader.GetInt64(reader.GetOrdinal("Torn_ID"));
-                                string tornUsername = reader.GetString(reader.GetOrdinal("Torn_UserName"));
-                                string tornAPI = reader.GetString(reader.GetOrdinal("Torn_API"));
-                                membersList.Add((tornId, tornUsername, tornAPI));
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Database Error: {ex.Message}"));
-                    return;
-                }
-                finally
-                {
-                    dbConnection.CloseConnection(connection);
-                }
-            }
-            else
-            {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Unable to connect to the database. Please try again later."));
-                return;
-            }
+            //        // Fetch faction members
+            //        string memberQuery = "SELECT Torn_ID, Torn_UserName, Torn_API FROM members WHERE faction_id = (SELECT faction_id FROM members WHERE discord_id = @DiscordID)";
+            //        using (var cmd = new MySqlCommand(memberQuery, connection))
+            //        {
+            //            cmd.Parameters.AddWithValue("@DiscordID", discordID);
+            //            using (var reader = await cmd.ExecuteReaderAsync())
+            //            {
+            //                while (reader.Read())
+            //                {
+            //                    long tornId = reader.GetInt64(reader.GetOrdinal("Torn_ID"));
+            //                    string tornUsername = reader.GetString(reader.GetOrdinal("Torn_UserName"));
+            //                    string tornAPI = reader.GetString(reader.GetOrdinal("Torn_API"));
+            //                    membersList.Add((tornId, tornUsername, tornAPI));
+            //                }
+            //            }
+            //        }
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"Database Error: {ex.Message}"));
+            //        return;
+            //    }
+            //    finally
+            //    {
+            //        dbConnection.CloseConnection(connection);
+            //    }
+            //}
+            //else
+            //{
+            //    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Unable to connect to the database. Please try again later."));
+            //    return;
+            //}
 
             // Step 2: Iterate over faction members and fetch Xanax usage
             var embedBuilder = new DiscordEmbedBuilder

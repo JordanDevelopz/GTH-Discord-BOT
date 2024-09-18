@@ -4,9 +4,17 @@ using DSharpPlus.Entities;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Script.v1;
+using Google.Apis.Services;
+using Google.Apis.Sheets.v4;
+using Google.Apis.Sheets.v4.Data;
+using Google.Apis.Util.Store;
 using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -61,6 +69,289 @@ namespace TornWarTracker
             }
         }
     }
+
+    public class GoogleSheetsService : IDisposable
+    {
+        private SheetsService _service;
+        private UserCredential _credential;
+
+        public GoogleSheetsService()
+        {
+            InitializeService();
+        }
+
+        private void InitializeService()
+        {
+            using (var stream = new FileStream("credentials.json", FileMode.Open, FileAccess.Read))
+            {
+                string credPath = "token.json";
+                _credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
+                    GoogleClientSecrets.FromStream(stream).Secrets,
+                    new[] { SheetsService.Scope.Spreadsheets },
+                    "user",
+                    CancellationToken.None,
+                    new FileDataStore(credPath, true)).Result;
+            }
+
+            _service = new SheetsService(new BaseClientService.Initializer()
+            {
+                HttpClientInitializer = _credential,
+                ApplicationName = "Google Sheets API .NET Quickstart",
+            });
+        }
+
+        public SheetsService GetService()
+        {
+            return _service;
+        }
+
+        public void Dispose()
+        {
+            _service?.Dispose();
+            _credential = null;
+        }
+    }
+
+    public class GoogleAppsScriptService : IDisposable
+    {
+        private ScriptService _service;
+        private UserCredential _credential;
+
+        public GoogleAppsScriptService()
+        {
+            InitializeService();
+        }
+
+        private void InitializeService()
+        {
+            using (var stream = new FileStream("credentials.json", FileMode.Open, FileAccess.Read))
+            {
+                string credPath = "token.json";
+                _credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
+                    GoogleClientSecrets.FromStream(stream).Secrets,
+                    new[] { "https://www.googleapis.com/auth/script.external_request", "https://www.googleapis.com/auth/spreadsheets" },
+                    "user",
+                    CancellationToken.None,
+                    new FileDataStore(credPath, true)).Result;
+            }
+
+            _service = new ScriptService(new BaseClientService.Initializer()
+            {
+                HttpClientInitializer = _credential,
+                ApplicationName = "Google Apps Script API .NET Quickstart",
+            });
+        }
+
+        public ScriptService GetService()
+        {
+            RefreshTokenIfNeeded();
+            return _service;
+        }
+
+        private void RefreshTokenIfNeeded()
+        {
+            if (_credential.Token.IsStale)
+            {
+                _credential.RefreshTokenAsync(CancellationToken.None).Wait();
+            }
+        }
+
+        public void Dispose()
+        {
+            _service?.Dispose();
+            _credential = null;
+        }
+    }
+
+    public class UserData
+    {
+        public string ApiKey { get; set; }
+        public long TornID { get; set; }
+        public string TornUserName { get; set; }
+        public int FactionID { get; set; }
+        public string factionName { get; set; }
+        public string factionSheetID { get; set; }
+        public string factionDeploymentID { get; set; }
+        public bool paid { get; set; }
+    }
+
+    public class UserService
+    {
+        private readonly GoogleSheetsService _dbConnection;
+
+        public UserService()
+        {
+            _dbConnection = new GoogleSheetsService();
+        }
+
+        public async Task<(bool Success, UserData Data, string ErrorMessage)> GetUserDetailsAsync(string discordID)
+        {
+            var service = _dbConnection.GetService();
+
+            if (service == null)
+            {
+                return (false, null, "Unable to connect to the database. Please try again later.");
+            }
+
+            try
+            {
+                var userData = await GetUserDataFromSheetAsync(discordID, service);
+                if (userData == null)
+                {
+                    return (false, null, "User not found or not registered properly.");
+                }
+
+                Console.WriteLine($"ApiKey: {userData.ApiKey}");
+                Console.WriteLine($"TornID: {userData.TornID}");
+                Console.WriteLine($"TornUserName: {userData.TornUserName}");
+                Console.WriteLine($"FactionID: {userData.FactionID}");
+                Console.WriteLine($"factionName: {userData.factionName}");
+
+                Console.WriteLine("1");
+
+                var factionData = await GetFactionDataFromSheetAsync(userData.FactionID, service);
+                if (factionData == null)
+                {
+                    return (false, null, "Faction details not found.");
+                }
+
+                Console.WriteLine($"factionName : {userData.factionName}");
+                Console.WriteLine($"factionSheetID : {userData.factionSheetID}");
+                Console.WriteLine($"factionDeploymentID : {userData.factionDeploymentID}");
+                Console.WriteLine($"paid : {userData.paid}");
+
+                userData.factionName = factionData.factionName;
+                userData.factionSheetID = factionData.factionSheetID;
+                userData.factionDeploymentID = factionData.factionDeploymentID;
+                userData.paid = factionData.paid;
+
+
+                if (!userData.paid)
+                {
+                    return (false, null, "Your faction has not paid for the DataSpartan services. Please ensure the payment is completed before using DataSpartan.");
+                }
+
+                if (string.IsNullOrEmpty(userData.ApiKey) || userData.FactionID == 0)
+                {
+                    return (false, null, "Could not find your API key or faction ID.");
+                }
+
+                return (true, userData, null);
+            }
+            catch (Exception ex)
+            {
+                return (false, null, $"Database Error: {ex.Message}");
+            }
+            finally
+            {
+                _dbConnection.Dispose();
+            }
+        }
+
+        private async Task<UserData> GetUserDataFromSheetAsync(string discordID, SheetsService service)
+        {
+            // Define the range to read the entire column A.
+            string searchRange = $"{GS_DBUtils.memberSheet}!A:A";
+            SpreadsheetsResource.ValuesResource.GetRequest searchRequest =
+                service.Spreadsheets.Values.Get(GS_DBUtils.masterSheetID, searchRange);
+
+            // Execute the request asynchronously.
+            ValueRange searchResponse = await searchRequest.ExecuteAsync();
+            IList<IList<object>> searchValues = searchResponse.Values;
+
+            if (searchValues != null && searchValues.Count > 0)
+            {
+                for (int i = 0; i < searchValues.Count; i++)
+                {
+                    if (searchValues[i].Count > 0 && searchValues[i][0].ToString() == discordID)
+                    {
+                        // Define the range to read the entire row.
+                        string rowRange = $"{GS_DBUtils.memberSheet}!A{i + 1}:F{i + 1}";
+                        SpreadsheetsResource.ValuesResource.GetRequest rowRequest =
+                            service.Spreadsheets.Values.Get(GS_DBUtils.masterSheetID, rowRange);
+
+                        // Execute the request asynchronously.
+                        ValueRange rowResponse = await rowRequest.ExecuteAsync();
+                        IList<IList<object>> rowValues = rowResponse.Values;
+
+                        if (rowValues != null && rowValues.Count > 0)
+                        {
+                            var row = rowValues[0];
+                            return new UserData
+                            {
+                                factionName = row.Count > 1 ? row[1].ToString() : null,
+                                FactionID = row.Count > 2 ? int.Parse(row[2].ToString()) : 0,
+                                TornID = row.Count > 3 ? long.Parse(row[3].ToString()) : 0,
+                                TornUserName = row.Count > 4 ? row[4].ToString() : null,
+                                ApiKey = row.Count > 5 ? row[5].ToString() : null                                
+
+                                //ApiKey = row[1].ToString(),
+                                //TornID = long.Parse(row[2].ToString()),
+                                //FactionID = int.Parse(row[3].ToString()),
+                                //factionName = row[4].ToString(),
+                                //TornUserName = row[5].ToString()
+                            };
+                        }
+                    }
+                }
+            }
+
+            // Return null if the user is not found.
+            return null;
+        }
+
+        private async Task<UserData> GetFactionDataFromSheetAsync(int factionID, SheetsService service)
+        {
+            // Define the range to read the entire column A.
+            string searchRange = $"{GS_DBUtils.factionDataSheet}!A:A";
+            SpreadsheetsResource.ValuesResource.GetRequest searchRequest =
+                service.Spreadsheets.Values.Get(GS_DBUtils.masterSheetID, searchRange);
+
+            // Execute the request asynchronously.
+            ValueRange searchResponse = await searchRequest.ExecuteAsync();
+            IList<IList<object>> searchValues = searchResponse.Values;
+
+            string FactID = factionID.ToString();
+
+            if (searchValues != null && searchValues.Count > 0)
+            {
+                for (int i = 0; i < searchValues.Count; i++)
+                {
+                    if (searchValues[i].Count > 0 && searchValues[i][0].ToString() == FactID)
+                        {
+                        // Define the range to read the entire row.
+                        string rowRange = $"{GS_DBUtils.factionDataSheet}!A{i + 1}:E{i + 1}";
+                        SpreadsheetsResource.ValuesResource.GetRequest rowRequest =
+                            service.Spreadsheets.Values.Get(GS_DBUtils.masterSheetID, rowRange);
+
+                        // Execute the request asynchronously.
+                        ValueRange rowResponse = await rowRequest.ExecuteAsync();
+                        IList<IList<object>> rowValues = rowResponse.Values;
+                        if (rowValues != null && rowValues.Count > 0)
+                        {
+                            var row = rowValues[0];
+                            bool paid = false;
+                            if (row.Count > 4)
+                            {
+                                bool.TryParse(row[4].ToString(), out paid);
+                            }
+                            return new UserData
+                            {
+                                factionName = row[1].ToString(),
+                                factionSheetID = row[2].ToString(),
+                                factionDeploymentID = row[3].ToString(),
+                                paid = paid
+                            };
+                        }
+                    }
+                }
+            }
+
+            // Return null if the faction is not found.
+            return null;
+        }
+    }
+
     internal class Program
     {
         //private CancellationTokenSource _cts{  get; set; }
@@ -155,7 +446,6 @@ namespace TornWarTracker
             };
         }
 
-
         private static Task Client_Ready(DiscordClient sender, DSharpPlus.EventArgs.ReadyEventArgs args)
         {
           return Task.CompletedTask;
@@ -211,77 +501,77 @@ namespace TornWarTracker
 
 
 
-        public class UserData
-        {
-            public string ApiKey { get; set; }
-            public long TornID { get; set; }
-            public int FactionID { get; set; }
-            public string factionName { get; set; }
-        }
+        //public class UserData
+        //{
+        //    public string ApiKey { get; set; }
+        //    public long TornID { get; set; }
+        //    public int FactionID { get; set; }
+        //    public string factionName { get; set; }
+        //}
 
-        public class UserService
-        {
-            private readonly DatabaseConnection _dbConnection;
+        //public class UserService
+        //{
+        //    private readonly DatabaseConnection _dbConnection;
 
-            public UserService()
-            {
-                _dbConnection = new DatabaseConnection();
-            }
+        //    public UserService()
+        //    {
+        //        _dbConnection = new DatabaseConnection();
+        //    }
 
-            public async Task<(bool Success, UserData Data, string ErrorMessage)> GetUserDetailsAsync(string discordID)
-            {
-                MySqlConnection connection = _dbConnection.GetConnection();
+        //    public async Task<(bool Success, UserData Data, string ErrorMessage)> GetUserDetailsAsync(string discordID)
+        //    {
+        //        MySqlConnection connection = _dbConnection.GetConnection();
 
-                if (connection == null)
-                {
-                    return (false, null, "Unable to connect to the database. Please try again later.");
-                }
+        //        if (connection == null)
+        //        {
+        //            return (false, null, "Unable to connect to the database. Please try again later.");
+        //        }
 
-                try
-                {
-                    var userData = new UserData();
+        //        try
+        //        {
+        //            var userData = new UserData();
 
-                    userData.ApiKey = await DBUtils.GetAPIKey(discordID, connection);
-                    if (userData.ApiKey == null)
-                    {
-                        return (false, null, "Cannot get your API Key. Please register first.");
-                    }
+        //            userData.ApiKey = await DBUtils.GetAPIKey(discordID, connection);
+        //            if (userData.ApiKey == null)
+        //            {
+        //                return (false, null, "Cannot get your API Key. Please register first.");
+        //            }
 
-                    userData.TornID = await DBUtils.GetTornID(discordID, connection);
-                    if (userData.TornID == 0)
-                    {
-                        return (false, null, "Cannot get your TornID. Please register first.");
-                    }
+        //            userData.TornID = await DBUtils.GetTornID(discordID, connection);
+        //            if (userData.TornID == 0)
+        //            {
+        //                return (false, null, "Cannot get your TornID. Please register first.");
+        //            }
 
-                    userData.FactionID = await DBUtils.GetfactionID(discordID, connection);
-                    if (userData.FactionID == 0)
-                    {
-                        return (false, null, "You are not registered in the faction. Please register first.");
-                    }
+        //            userData.FactionID = await DBUtils.GetfactionID(discordID, connection);
+        //            if (userData.FactionID == 0)
+        //            {
+        //                return (false, null, "You are not registered in the faction. Please register first.");
+        //            }
 
-                    bool paid = await DBUtils.VerifyPayment(userData.FactionID, connection);
-                    if (!paid)
-                    {
-                        return (false, null, "Your faction has not paid for the DataSpartan services. Please ensure the payment is completed before using DataSpartan.");
-                    }
+        //            bool paid = await DBUtils.VerifyPayment(userData.FactionID, connection);
+        //            if (!paid)
+        //            {
+        //                return (false, null, "Your faction has not paid for the DataSpartan services. Please ensure the payment is completed before using DataSpartan.");
+        //            }
 
-                    if (string.IsNullOrEmpty(userData.ApiKey) || userData.FactionID == 0)
-                    {
-                        return (false, null, "Could not find your API key or faction ID.");
-                    }
+        //            if (string.IsNullOrEmpty(userData.ApiKey) || userData.FactionID == 0)
+        //            {
+        //                return (false, null, "Could not find your API key or faction ID.");
+        //            }
 
-                    return (true, userData, null);
-                }
-                catch (Exception ex)
-                {
-                    return (false, null, $"Database Error: {ex.Message}");
-                }
-                finally
-                {
-                    _dbConnection.CloseConnection(connection);
-                }
-            }
-        }
+        //            return (true, userData, null);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            return (false, null, $"Database Error: {ex.Message}");
+        //        }
+        //        finally
+        //        {
+        //            _dbConnection.CloseConnection(connection);
+        //        }
+        //    }
+        //}
 
 
     }

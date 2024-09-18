@@ -1,27 +1,17 @@
-﻿using DSharpPlus.Entities;
-using DSharpPlus;
+﻿using DSharpPlus;
+using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
-using MySql.Data.MySqlClient;
+using Google.Apis.Script.v1.Data;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TornWarTracker.Torn_API;
-using TornWarTracker.War;
-using Google.Protobuf.WellKnownTypes;
-using DSharpPlus.Interactivity.Extensions;
-using TornWarTracker.DB;
-using static TornWarTracker.Torn_API.tornAPIUtils;
-using System.IO;
-using TornWarTracker.Data_Creation;
-using TornWarTracker.Discord_Utilities;
+using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
-using static TornWarTracker.War.WarTracking;
-using static TornWarTracker.Program;
+using System.Threading.Tasks;
+using TornWarTracker.DB;
+using TornWarTracker.Torn_API;
 
 namespace TornWarTracker.Commands.Slash
 {
@@ -29,8 +19,6 @@ namespace TornWarTracker.Commands.Slash
     public class WarSC : ApplicationCommandModule
     {
         private static HttpClient httpClient = new HttpClient();
-
-        private readonly WarTracking warTracking = new WarTracking();
 
         [SlashCommand("RankedWarTracker", "Use this command to interact with ranked war tracker")]
         public async Task InitiateWarTracker(InteractionContext ctx)
@@ -47,6 +35,9 @@ namespace TornWarTracker.Commands.Slash
             string apiKey = null;
             long tornID = 0;
             int factionID = 0;
+            string factionName = null;
+            string factionSheetID = null;
+            string factionDeploymentID = null;
 
             UserService userService = new UserService();
             var result = await userService.GetUserDetailsAsync(discordID);
@@ -60,6 +51,9 @@ namespace TornWarTracker.Commands.Slash
                 apiKey = userData.ApiKey;
                 tornID = userData.TornID;
                 factionID = userData.FactionID;
+                factionName = userData.factionName;
+                factionSheetID = userData.factionSheetID;
+                factionDeploymentID = userData.factionDeploymentID;
             }
             else
             {
@@ -67,10 +61,15 @@ namespace TornWarTracker.Commands.Slash
                 return;
             }
 
-            //Step 2: perform check to see if this is already running for this faction:
-            if (WarTrackerState.WarTrackerRunning.TryGetValue(factionID, out bool isRunning) && isRunning)
+            //Step 2: perform check to see if this is already running for this faction: <<<< THIS NEEDS CHANGING
+            string status = await GS_DBUtils.ReadSheet(factionSheetID, "Info","D20");
+            if (status == null)
             {
-                Console.WriteLine("Task already running for this faction.");
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Could not obtain status of war tracker."));
+                return;
+            }
+            else if (status == "Running")
+            {
                 await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("War Tracker already running for this faction."));
                 return;
             }
@@ -112,141 +111,155 @@ namespace TornWarTracker.Commands.Slash
             int enemyFactionID = 0;
             int rankedWarID = 0;
             //create initial war message to channel
-            try
+
+            //COMMENTED OUT FOR TESTING
+
+            //if (factionBasic["ranked_wars"] != null && factionBasic["ranked_wars"].HasValues)
+            //{
+            //    var rankedWar = (JObject)factionBasic["ranked_wars"].First.First;
+
+            //    var rankedWarQuery = factionBasic["ranked_wars"].First.Path;
+            //    var rankedWarKey = rankedWarQuery.Split('.').Last();
+            //    Console.WriteLine($"rankedWarQuery {rankedWarKey}");
+            //    rankedWarID = Convert.ToInt32(rankedWarKey);
+
+            //    var factions = (JObject)rankedWar["factions"];
+            //    // Accessing the war data
+            //    startTime = (long)rankedWar["war"]["start"];
+            //    long endTime = (long)rankedWar["war"]["end"];
+            //    int target = (int)rankedWar["war"]["target"];
+            //    int winner = (int)rankedWar["war"]["winner"];
+
+            //    if (endTime != 0)
+            //    {
+            //        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("The war is over, did you miss it?."));
+            //        return;
+            //    }
+
+            //    // Accessing the first faction
+            //    var firstFaction = factions.Properties().ElementAt(0);
+            //    string firstFactionName = (string)firstFaction.Value["name"];
+            //    int firstFactionScore = (int)firstFaction.Value["score"];
+            //    int firstFactionChain = (int)firstFaction.Value["chain"];
+
+            //    Console.WriteLine($"First Faction ID: {firstFaction.Name}, Name: {firstFactionName}, Score: {firstFactionScore}, Chain: {firstFactionChain}");
+
+            //    // Accessing the second faction
+            //    var secondFaction = factions.Properties().ElementAt(1);
+            //    string secondFactionName = (string)secondFaction.Value["name"];
+            //    int secondFactionScore = (int)secondFaction.Value["score"];
+            //    int secondFactionChain = (int)secondFaction.Value["chain"];
+
+            //    Console.WriteLine($"Second Faction ID: {secondFaction.Name}, Name: {secondFactionName}, Score: {secondFactionScore}, Chain: {secondFactionChain}");
+
+            //    if (Convert.ToInt32(firstFaction.Name) == factionID)
+            //    {
+            //        enemyFactionID = Convert.ToInt32(secondFaction.Name);
+            //    }
+            //    else
+            //    {
+            //        enemyFactionID = Convert.ToInt32(firstFaction.Name);
+            //    }
+
+            //    //compile in to embed
+            //    DateTime dateTimeStart = DateTimeOffset.FromUnixTimeSeconds(startTime).DateTime;
+            //    long currenttime = await tornAPIUtils.Torn.GetCurrentTimeStamp(apiKey);
+            //    DateTime dateTimeCurrent = DateTimeOffset.FromUnixTimeSeconds(currenttime).DateTime;
+
+            //    // Calculate the difference
+            //    TimeSpan timeDifference = dateTimeCurrent - dateTimeStart;
+
+            //    // Extract days, hours, minutes, and seconds
+            //    int days = timeDifference.Days;
+            //    int hours = timeDifference.Hours;
+            //    int minutes = timeDifference.Minutes;
+            //    int seconds = timeDifference.Seconds;
+
+            //    // Format the time difference into a string
+            //    string timeToStart = $"{days} days, {hours} hours, {minutes} minutes, {seconds} seconds";
+
+            //    var embedSuccess = new DiscordEmbedBuilder
+            //    {
+            //        Title = "WAR INFO",
+            //        Description = $"{firstFactionName} vs {secondFactionName}",
+            //        Color = DiscordColor.DarkRed
+            //    };
+            //    embedSuccess.AddField("Start Date:", DateTimeOffset.FromUnixTimeSeconds(startTime).DateTime.ToString());
+            //    embedSuccess.AddField("Time until start", timeToStart);
+            //    embedSuccess.AddField("Target to win", target.ToString());
+
+            //    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embedSuccess));
+
+            //}
+            //else
+            //{
+            //    // Handle the case where ranked_wars is empty or null
+            //    Console.WriteLine("No ranked wars data available.");
+
+            //    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Your faction is not currently matched for war."));
+            //    return;
+            //}
+
+            
+
+            // initiate war tracking here:
+            if (startTime == 0) //CHANGED FOR TESTING
             {
-                var rankedWar = (JObject)factionBasic["ranked_wars"].First.First;
-                
-
-                if (rankedWar != null)
+                using (var googleAppsScriptService = new GoogleAppsScriptService())
                 {
-                    var rankedWarQuery = factionBasic["ranked_wars"].First.Path;
-                    var rankedWarKey = rankedWarQuery.Split('.').Last();
-                    Console.WriteLine($"rankedWarQuery {rankedWarKey}");
-                    rankedWarID = Convert.ToInt32(rankedWarKey);
+                    var service = googleAppsScriptService.GetService();
 
-                    var factions = (JObject)rankedWar["factions"];
-                    // Accessing the war data
-                    startTime = (long)rankedWar["war"]["start"];
-                    long endTime = (long)rankedWar["war"]["end"];
-                    int target = (int)rankedWar["war"]["target"];
-                    int winner = (int)rankedWar["war"]["winner"];
-
-                    if (endTime != 0)
+                    if (service == null)
                     {
-                        await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("The war is over, did you miss it?."));
+                        Debug.WriteLine("Service is null!");
+                        return;
                     }
 
-                    // Accessing the first faction
-                    var firstFaction = factions.Properties().ElementAt(0);
-                    string firstFactionName = (string)firstFaction.Value["name"];
-                    int firstFactionScore = (int)firstFaction.Value["score"];
-                    int firstFactionChain = (int)firstFaction.Value["chain"];
+                    // Define the script ID and function to call
+                    string functionName = "myFunction3";
 
-                    Console.WriteLine($"First Faction ID: {firstFaction.Name}, Name: {firstFactionName}, Score: {firstFactionScore}, Chain: {firstFactionChain}");
-
-                    // Accessing the second faction
-                    var secondFaction = factions.Properties().ElementAt(1);
-                    string secondFactionName = (string)secondFaction.Value["name"];
-                    int secondFactionScore = (int)secondFaction.Value["score"];
-                    int secondFactionChain = (int)secondFaction.Value["chain"];
-
-                    Console.WriteLine($"Second Faction ID: {secondFaction.Name}, Name: {secondFactionName}, Score: {secondFactionScore}, Chain: {secondFactionChain}");
-
-                    if (Convert.ToInt32(firstFaction.Name) == factionID)
+                    // Create the request
+                    var request = new ExecutionRequest
                     {
-                        enemyFactionID = Convert.ToInt32(secondFaction.Name);
-                    }
-                    else
-                    {
-                        enemyFactionID = Convert.ToInt32(firstFaction.Name);
-                    }
-
-                    //compile in to embed
-                    DateTime dateTimeStart = DateTimeOffset.FromUnixTimeSeconds(startTime).DateTime;
-                    long currenttime = await tornAPIUtils.Torn.GetCurrentTimeStamp(apiKey);
-                    DateTime dateTimeCurrent = DateTimeOffset.FromUnixTimeSeconds(currenttime).DateTime;
-
-                    // Calculate the difference
-                    TimeSpan timeDifference = dateTimeCurrent - dateTimeStart;
-
-                    // Extract days, hours, minutes, and seconds
-                    int days = timeDifference.Days;
-                    int hours = timeDifference.Hours;
-                    int minutes = timeDifference.Minutes;
-                    int seconds = timeDifference.Seconds;
-
-                    // Format the time difference into a string
-                    string timeToStart = $"{days} days, {hours} hours, {minutes} minutes, {seconds} seconds";
-
-                    var embedSuccess = new DiscordEmbedBuilder
-                    {
-                        Title = "WAR INFO",
-                        Description = $"{firstFactionName} vs {secondFactionName}",
-                        Color = DiscordColor.DarkRed
+                        Function = functionName
                     };
-                    embedSuccess.AddField("Start Date:", DateTimeOffset.FromUnixTimeSeconds(startTime).DateTime.ToString());
-                    embedSuccess.AddField("Time until start", timeToStart);
-                    embedSuccess.AddField("Target to win", target.ToString());
 
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().AddEmbed(embedSuccess));
-                    
-                }
-                else
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Your faction is not currently matched for war."));
-                    return;
-                }
-            }
-            catch
-            {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error Occured with war tracker!"));
-                return;
-            }
-
-            //Check start time is not zero
-            if (startTime != 0)
-            {
-                //get emebers of the faction
-                var members = factionBasic["members"] as JObject;
-                if (members != null)
-                {
-                    //mark war tracker as running
-                    WarTrackerState.WarTrackerRunning[factionID] = true;
-
-                    long teststarttime = 1726334915;
-                    bool cannotStartYet = false;
-                    //perform war tracking tasks
-                    try
+                    _ = Task.Run(async () =>
                     {
-                        cannotStartYet = await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, startTime);
-                        //await warTracking.Tracker(ctx, apiKey, rankedWarID, factionID, enemyFactionID, members, teststarttime);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        Console.WriteLine("Task was cancelled.");
-                    }
-                    finally
-                    {
-                        if (!cannotStartYet)
+                        try
                         {
-                            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent($"War Tracker has finished, <@{ctx.User.Id}>."));
-                        }                       
-                        
-                    }            
+                            var scriptRequest = service.Scripts.Run(request, factionDeploymentID);
+                            await scriptRequest.ExecuteAsync();
+                            
+                        }
+                        catch (Google.GoogleApiException ex)
+                        {
+                            Debug.WriteLine("Google API Exception: " + ex.Message);
+                            Debug.WriteLine("Error Code: " + ex.Error.Code);
+                            Debug.WriteLine("Error Details: " + ex.Error.Message);
+                            if (ex.Error != null && ex.Error.Errors != null)
+                            {
+                                foreach (var error in ex.Error.Errors)
+                                {
+                                    Debug.WriteLine("Error Reason: " + error.Reason);
+                                    Debug.WriteLine("Error Message: " + error.Message);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine("General Exception: " + ex.Message);
+                            //await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Error Occured with war tracker!"));
+                        }
+                    });
 
-                    //finished
+                    Debug.WriteLine("Script execution started.");
+
+                    // Execute the code that was in the finally block immediately
+                    await GS_DBUtils.WriteSheet(factionSheetID, "Info", "D20", "Running");
+                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("War tracker is now running!"));
                 }
-                else
-                {
-                    await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Not data recieved about members of your faction. Could not start war tracker!"));
-                    return;
-                }                
-            }
-            else
-            {
-                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Could not start war tracker!"));
-                return;
-            }        
+            }     
         }
 
         [SlashCommand("RW_Tracker_Status", "Use this command to check the status of the enemy")]
@@ -258,6 +271,7 @@ namespace TornWarTracker.Commands.Slash
             string apiKey = null;
             long tornID = 0;
             int factionID = 0;
+            string factionSheetID = null;
 
             UserService userService = new UserService();
             var result = await userService.GetUserDetailsAsync(discordID);
@@ -271,6 +285,7 @@ namespace TornWarTracker.Commands.Slash
                 apiKey = userData.ApiKey;
                 tornID = userData.TornID;
                 factionID = userData.FactionID;
+                factionSheetID = userData.factionSheetID;
             }
             else
             {
@@ -278,16 +293,15 @@ namespace TornWarTracker.Commands.Slash
                 return;
             }
 
-            if (WarTrackerState.WarTrackerRunning.TryGetValue(factionID, out bool isRunning) && isRunning)
+            string status = await GS_DBUtils.ReadSheet(factionSheetID, "Info", "D20");
+            if (status == null)
             {
-                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
-                    .WithContent("War Tracker is already running."));
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("Could not obtain status of war tracker."));
                 return;
             }
-            else
+            else if (status == "Running")
             {
-                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder()
-                    .WithContent("War Tracker is not currently running."));
+                await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder().WithContent("War Tracker already running for this faction."));
                 return;
             }
         }

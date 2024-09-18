@@ -21,13 +21,13 @@ namespace TornWarTracker.Events
                 string specificText = "Hey DataSpartan";
                 var responses = new Dictionary<string, string>
     {
-        { "l4leezus", "Hey, Dad!" },
+        { "l4leezus", "Please don't change my code again. I said I'm fine." },
         { "alaska2116", "Hey, it's my Uncle, Alaska!" },
         { "jpb5537", "Hold up, it's the Boss. Hey JB!" },
         { "theslimp", "Shhh, a founder is speaking. Hey Slimp" },
         { "itsmrd", "Hey, Dank.. Or should I say; Mr capital D!" },
         { "shortcircuit4029", "Some call him Obi, but I wasn't born then. Hey Haakon!" },
-        { "mahmoudbakis29208224063", "Mr Lucky has entered the chat, Howdy!" },
+        { "mahmoudbakis29208224063", "Hey Mahmoud, your giving is inspiring... Spare a penny for the bot?" },
         { "turbo9393", "The council has spoken. Hey Turbo!" },
         { "wookies1373", "Hey Wooks. Mind where you put that sword!" },
         { "bobbia_72614", "If it isn't the master of max jumps. Hey Bobbia!" }
